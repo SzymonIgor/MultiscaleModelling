@@ -530,6 +530,7 @@ class Functionalities:
         else:
             self.fileName = window.PATH_EXPORT.get()
 
+
         array = []
         with open(str(self.currentPath + r'\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
             for r in range(data.shape[0]):
