@@ -445,18 +445,14 @@ class FrontEnd(CellularAutomata):
         self.show = Image.fromarray(self.show)
         self.refresh()
 
-    def mappingToImage(self):
+    def map_to_image(self):
         array = self.get()
         img = np.array([[colors[array[r][c]] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
-        self.img = img
-
-    def showImage(self):
-        self.mappingToImage()
         # cv2.imshow("Callular Automata Image", self.img)
-        b, g, r = cv2.split(self.img)
-        image = cv2.merge((r, g, b))
-        image = Image.fromarray(image)
-        return image
+        b, g, r = cv2.split(img)
+        img = cv2.merge((r, g, b))
+        self.img = img
+        return img
 
 
     def refresh(self):
@@ -466,7 +462,7 @@ class FrontEnd(CellularAutomata):
             # self.show = self.show
         else:
             pass
-        self.show = self.showImage()
+        self.show = self.map_to_image()
         return self.show
 
 
@@ -486,7 +482,7 @@ class Functionalities:
             self.saveFile(self.FE.get())
         elif self.operation == "Export":
             print('Exporting')
-            self.exportFile(self.FE.get())
+            self.exportFile(self.FE.get(), self.FE.map_to_image())
         elif self.operation == "Open":
             print('Opening')
             self.FE.set(self.openFile())
@@ -527,7 +523,7 @@ class Functionalities:
         with open(str(self.currentPath + r'\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
             np.savetxt(file_s, data, delimiter=',', fmt='%d')
 
-    def exportFile(self, data):
+    def exportFile(self, data, image):
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         if window.PATH_EXPORT.get() == '':
             self.fileName = f'Export_{self.timeNow}'
@@ -541,6 +537,7 @@ class Functionalities:
                     new = [r, c, data[r][c]]
                     array.append(new)
             np.savetxt(file_s, array, delimiter=';', fmt='%d')
+        cv2.imwrite(self.currentPath + r'\\' + str(self.fileName) + '.png', image)
 
     def openFile(self):
         path = filedialog.askopenfilename(filetypes=(("*.csv", "*.csv"), ("All files", "*.*")))
@@ -694,7 +691,7 @@ window.LIST.pack(side=LEFT)
 
 f = Functionalities()
 while 1:
-    i = ImageTk.PhotoImage(f.FE.refresh(), master=window)
+    i = ImageTk.PhotoImage(Image.fromarray(f.FE.refresh()), master=window)
     window.canvas.create_image(0, 0, anchor=NW, image=i)
     try:
         KERNEL_CURR_VALUE.set(KERNELS[window.LIST.curselection()[0]])
