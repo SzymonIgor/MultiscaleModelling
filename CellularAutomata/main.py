@@ -11,74 +11,161 @@ from tkinter import filedialog
 import threading
 import time
 
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
+import matplotlib
+matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.figure import Figure
 from PIL import Image, ImageTk, ImageColor
 
 
 window = Tk()
 window.title('Cellular Automata')
 # ************************************************************************
-colors = {'0': 'white',
-          '1': 'red',
-          '2': 'black',
-          '3': 'orange',
-          '4': 'purple',
-          '5': 'yellow',
-          '6': 'pink',
-          '7': 'blue',
+colors = {'0': "white",
+          '1': "red",
+          '2': "black",
+          '3': "orange",
+          '4': "purple",
+          '5': "yellow",
+          '6': "pink",
+          '7': "blue",
+          '8': "gray",
+          '9': "crimson",
+          '10': "deepskyblue",
+          '11': "fuchsia",
+          '12': "charteuse"
           }
 
 # ************************************************************************
 
-class CellularAutomata:
+class FrontEnd:
     def __init__(self):
-        self.rows = 50
-        self.columns = 50
+        self.rows = 100
+        self.columns = 100
         self.data = np.zeros([self.rows, self.columns], dtype=int)
-        self.generateSeed()
 
-    def get(self):
-        return self.data
-
-    def set(self, newData):
-        self.data = newData
-
-    def generateSeed(self):
-        for i in range(990):
-            a = randint(0, 7)
-            r = randint(0, self.rows - 1)
-            c = randint(0, self.columns - 1)
-            self.data[r][c] = a
-
-
-class FrontEnd(CellularAutomata):
-    def __init__(self):
-        super().__init__()
-        self.w = Canvas(window, width=self.columns, height=self.rows)
+        self.w = Canvas(window, height=self.rows, width=self.columns)
         self.w.grid(row=5, column=0)
         self.refresh()
 
+
+
+
     def create_point(self, x, y, color):
+        print(x, y, color)
         self.w.create_line(y, x, y + 1, x, fill=color)
 
     def refresh(self):
-        for r in range(self.data.shape[0]):
-            for c in range(self.data.shape[1]):
-                self.create_point(r, c, colors[str(self.data[r][c])])
+        # print(self.get())
 
-    def set(self, data):
-        self.data = data
+        for r in range(self.rows):
+            for c in range(self.columns-1):
+                # print(str(self.get()[r][c]))
+                self.create_point(r, c, colors[str(self.get()[r][c])])
+        time.sleep(0.5)
+        window.update_idletasks()
+        window.update()
+
+
+        # print(self.get())
+        # print(self.get())
+
+    def set(self, newData):
+        self.data = newData
+        self.rows = newData.shape[0]
+        self.columns = newData.shape[1]
+        self.w = Canvas(window, width=self.columns, height=self.rows)
         self.refresh()
 
     def get(self):
         return self.data
 
+    def generateSeed(self):
+        array = np.zeros([self.rows, self.columns], dtype=int)
+        # print(f'\n\n Seed generation')
+        for i in range(100):
+            a = randint(1, 100)
+            r = randint(0, self.rows - 1)
+            c = randint(0, self.columns - 1)
+            array[r][c] = a % 2 + 1
+        self.set(array)
 
-class Functionalities(CellularAutomata):
+    def dilatate(self):
+        array = self.data
+        array_new = np.zeros([array.shape[0], array.shape[1]], dtype=int)
+        for r in range(0, array.shape[0]):
+            for c in range(0, array.shape[1]):
+                main_new = array[r][c]
+
+                if main_new == 0:
+                    try:
+                        UL = array[r - 1][c - 1]
+                    except:
+                        UL = 0
+                    try:
+                        UU = array[r - 1][c]
+                    except:
+                        UU = 0
+                    try:
+                        UR = array[r - 1][c + 1]
+                    except:
+                        UR = 0
+
+                    try:
+                        LL = array[r][c - 1]
+                    except:
+                        LL = 0
+                    try:
+                        RR = array[r][c + 1]
+                    except:
+                        RR = 0
+
+                    try:
+                        DL = array[r + 1][c - 1]
+                    except:
+                        DL = 0
+                    try:
+                        DD = array[r + 1][c]
+                    except:
+                        DD = 0
+
+                    try:
+                        DR = array[r + 1][c + 1]
+                    except:
+                        DR = 0
+
+                    temp = [UL, UU, UR, LL, RR, DL, DD, DR]
+                    if any(temp) != 0:
+                        for x in temp:
+                            if x == 0:
+                                pass
+                            else:
+                                main_new = x  # powinno brać to z największą ilością
+
+                    else:
+                        main_new = 0
+                else:
+                    main_new = main_new
+
+                array_new[r][c] = main_new
+        self.data = array_new
+        self.refresh()
+
+    def dilatate_ALL(self):
+        while 1:
+            # plt.imshow(self.data)
+            if self.data.all() == 0:
+                self.dilatate()
+                self.get()
+            else:
+                # plt.show()
+                break
+
+
+class Functionalities:
+    FE = FrontEnd()
+
     def __init__(self):
-        CellularAutomata.__init__(self)
         self.operation = None
         self.timeNow = None
         self.fileName = None
@@ -88,13 +175,16 @@ class Functionalities(CellularAutomata):
     def command_line_executioner(self):
         if self.operation == "Save":
             print('Saving')
-            self.saveFile(CellularAutomata.get(self))
+            # print(self.FE.get())
+            self.saveFile(self.FE.get())
         elif self.operation == "Open":
             print('Opening')
-            CellularAutomata.set(self, self.openFile())
+            self.FE.set(self.openFile())
         elif self.operation == "Seed":
             print("Seeeeding")
-            CellularAutomata.generateSeed(self)
+            print(f'OLD\n{self.FE.get()}')
+            self.FE.generateSeed()
+            print(f'NEW\n{self.FE.get()}')
         else:
             raise NameError
 
@@ -120,14 +210,7 @@ class ButtonCreator(Functionalities):
         self.button = Button(window, text=self.operation, command=self.command_line_executioner, height=1, width=7)
         self.button.grid(row=r, column=c)
 
-class ALL(Functionalities, FrontEnd, CellularAutomata):
-    def __init__(self):
-        Functionalities.__init__()
-        FrontEnd.__init__()
-        CellularAutomata.__init__()
 
-    def doStuuf(self):
-        pass
 ButtonCreator("Save", 0, 1)
 window.PATH_SAVE = Entry(window, textvariable=None)
 window.PATH_SAVE.grid(row=0, column=0)
@@ -140,12 +223,8 @@ window.PATH_OPEN.grid(row=1, column=0)
 
 ButtonCreator("Seed", 2, 1)
 
-
-CA = CellularAutomata()
-disp = FrontEnd()
-
-
-
+fig = Figure(figsize=(5,5), dpi=100)
+a = fig.add_subplot(111)
 
 
 
@@ -196,25 +275,21 @@ disp = FrontEnd()
 
 
 
-
-def GUI():
-    window.update_idletasks()
-    window.update()
-
-
-def update_of_CA():
-    disp.refresh()
-    # pprint(disp.data)
-    print("refreshing")
-
+f = Functionalities()
 
 while 1:
-    time.sleep(0.2)
-    t2 = threading.Thread(target=GUI())
+    a.plot(f.FE.get())
+    canvas = FigureCanvasTkAgg(fig, master=window)
+    canvas.draw()
+    canvas.get_tk_widget().grid(row=10, column=0)
+    f.FE.dilatate()
+    # f.FE.generateSeed()
+    # time.sleep(0.2)
+    # f.FE.dilatate_ALL()
 
-    t1 = threading.Thread(target=update_of_CA())
 
-    t2.start()
-    t1.start()
-    t2.join()
-    t1.join()
+
+
+
+
+
