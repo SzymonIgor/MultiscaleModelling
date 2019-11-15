@@ -2,13 +2,13 @@ import os
 
 from random import randint
 import numpy as np
-from datetime import datetime
+from datetime import datetime, time
 from tkinter import *
 from tkinter import filedialog
 import cv2
 from scipy import ndimage
-
-
+from PIL import Image, ImageTk
+import time
 
 import matplotlib
 matplotlib.use("TkAgg")
@@ -18,62 +18,62 @@ matplotlib.use("TkAgg")
 window = Tk()
 window.title('Cellular Automata Controls')
 # ************************************************************************
-colors = {'0': [255, 255, 255],  # white
+colors = {0: [255, 255, 255],  # white
+          1: [255, 45, 150],
+          2: [240, 60, 135],
+          3: [225, 75, 120],
+          4: [210, 90, 105],
+          5: [195, 105, 90],
+          6: [180, 120, 75],
+          7: [165, 135, 60],
+          8: [150, 150, 45],
+          9: [135, 165, 255],
+          10: [120, 180, 240],
+          11: [105, 195, 225],
+          12: [90, 210, 210],
+          13: [75, 225, 195],
+          14: [60, 240, 180],
+          15: [45, 255, 165],
 
-          '1':  [255,  45, 150],
-          '2':  [240,  60, 135],
-          '3':  [225,  75, 120],
-          '4':  [210,  90, 105],
-          '5':  [195, 105,  90],
-          '6':  [180, 120,  75],
-          '7':  [165, 135,  60],
-          '8':  [150, 150,  45],
-          '9':  [135, 165, 255],
-          '10': [120, 180, 240],
-          '11': [105, 195, 225],
-          '12': [ 90, 210, 210],
-          '13': [ 75, 225, 195],
-          '14': [ 60, 240, 180],
-          '15': [ 45, 255, 165],
+          16: [150, 255, 45],
+          17: [135, 240, 60],
+          18: [120, 225, 75],
+          19: [105, 210, 90],
+          20: [90, 195, 105],
+          21: [75, 180, 120],
+          22: [60, 165, 135],
+          23: [45, 150, 150],
+          24: [255, 135, 165],
+          25: [240, 120, 180],
+          26: [225, 105, 195],
+          27: [210, 90, 210],
+          28: [195, 75, 225],
+          29: [180, 60, 240],
+          30: [165, 45, 255],
 
-          '16': [ 150, 255,  45],
-          '17': [ 135, 240,  60],
-          '18': [ 120, 225,  75],
-          '19': [ 105, 210,  90],
-          '20': [  90, 195, 105],
-          '21': [  75, 180, 120],
-          '22': [  60, 165, 135],
-          '23': [  45, 150, 150],
-          '24': [ 255, 135, 165],
-          '25': [ 240, 120, 180],
-          '26': [ 225, 105, 195],
-          '27': [ 210,  90, 210],
-          '28': [ 195,  75, 225],
-          '29': [ 180,  60, 240],
-          '30': [ 165,  45, 255],
+          31: [45, 150, 255],
+          32: [60, 135, 240],
+          33: [75, 120, 225],
+          34: [90, 105, 210],
+          35: [105, 90, 195],
+          36: [120, 75, 180],
+          37: [135, 60, 165],
+          38: [150, 45, 150],
+          39: [165, 255, 135],
+          40: [180, 240, 120],
+          41: [195, 225, 105],
+          42: [210, 210, 90],
+          43: [225, 195, 75],
+          44: [240, 180, 60],
+          45: [255, 165, 45],
 
-          '31': [ 45,  150, 255],
-          '32': [ 60,  135, 240],
-          '33': [ 75,  120, 225],
-          '34': [ 90,  105, 210],
-          '35': [105,   90, 195],
-          '36': [120,   75, 180],
-          '37': [135,   60, 165],
-          '38': [150,   45, 150],
-          '39': [165,  255, 135],
-          '40': [180,  240, 120],
-          '41': [195,  225, 105],
-          '42': [210,  210,  90],
-          '43': [225,  195,  75],
-          '44': [240,  180,  60],
-          '45': [255,  165,  45],
+          46: [222, 44, 11],
+          47: [90, 6, 90],
+          48: [190, 0, 33],
+          49: [15, 66, 150],
+          50: [99, 225, 8],
+          51: [19, 210, 255],
 
-          '46': [222,  44,  11],
-          '47': [ 90,  6,  90],
-          '48': [190,  0,  33],
-          '49': [ 15,  66, 150],
-          '50': [ 99, 225,   8],
-          '51': [ 19, 210, 255],
 
           }
 
@@ -173,32 +173,40 @@ class CellularAutomata:
 
 
 class FrontEnd(CellularAutomata):
+
+
     def __init__(self):
         super().__init__()
         self.img = np.zeros([self.get().shape[0], self.get().shape[1], 3], dtype=np.uint8)
+        b, g, r = cv2.split(self.img)
+        self.show = cv2.merge((r, g, b))
+        self.show = Image.fromarray(self.show)
+        self.refresh()
 
     def mappingToImage(self):
-        img = np.zeros([self.get().shape[0], self.get().shape[1], 3], dtype=np.uint8)
         array = self.get()
-        for r in range(0, array.shape[0]):
-            for c in range(0, array.shape[1]):
-                id = array[r][c]
-                img[r][c] = [0, 0, 0]
-                img[r][c] = colors[str(id)]
+        img = np.array([[colors[array[r][c]] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
         self.img = img
 
     def showImage(self):
+        self.mappingToImage()
         cv2.imshow("Callular Automata Image", self.img)
+        b, g, r = cv2.split(self.img)
+        image = cv2.merge((r, g, b))
+        image = Image.fromarray(image)
+        return image
+
 
     def refresh(self):
         # print(f'0 {datetime.now()}')
         if self.is_procedure is True:
             self.dilatate()
+            self.show = self.show
         else:
-            self.mappingToImage()
-            self.showImage()
+            self.show = self.showImage()
         window.update_idletasks()
         window.update()
+        return self.show
 
 
 class Functionalities:
@@ -314,6 +322,9 @@ window.LIST.select_set(0)
 window.LIST.grid(row=3, column=4, rowspan=20)
 
 
+
+
+
 ButtonCreator("Seed", 0, 5)
 
 ButtonCreator("RST", 1, 5)
@@ -330,10 +341,41 @@ window.RANDOM_BOX = Checkbutton(window, text="Random", variable=RANDOM_BOX_VALUE
 window.RANDOM_BOX.grid(row=5, column=5)
 
 
+#
+# i = np.zeros([50, 50, 3], dtype=np.uint8)
+# b, g, r = cv2.split(i)
+# i = cv2.merge((r, g, b))
+# i = Image.fromarray(i)
+# i = ImageTk.PhotoImage(i)
+#
+# window.PANEL = Label(window, image=i)
+# window.PANEL.grid(row=10, column=0)
+
+
+
+
+
 f = Functionalities()
 
+
+# window.PANEL = Label(window, image=i)
+# window.PANEL.image = i
+# window.PANEL.grid(row=10, column=10)
+
+
+# i = ImageTk.PhotoImage(Image.fromarray(np.ones([50, 50, 3], dtype=np.uint8)), master=window)
+window.canvas = Canvas(window, width=500, height=500)
+window.canvas.grid(row=30, column=0)
+
+
+
+
 while 1:
-    f.FE.refresh()
+    i = ImageTk.PhotoImage(f.FE.refresh(), master=window)
+    window.canvas.create_image(0, 0, image=i)
+
+
+
 
 
 '''
