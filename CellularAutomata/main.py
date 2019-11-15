@@ -10,6 +10,10 @@ import tkinter as tk
 from tkinter import filedialog
 import threading
 import time
+import cv2
+
+from numpy.lib.stride_tricks import as_strided
+
 
 import matplotlib
 matplotlib.use("TkAgg")
@@ -19,80 +23,102 @@ from PIL import Image, ImageTk, ImageColor
 
 
 window = Tk()
-window.title('Cellular Automata')
+window.title('Cellular Automata Controls')
 # ************************************************************************
-colors = {'0': "white",
-          '1': "red",
-          '2': "black",
-          '3': "orange",
-          '4': "purple",
-          '5': "yellow",
-          '6': "pink",
-          '7': "blue",
-          '8': "gray",
-          '9': "crimson",
-          '10': "deepskyblue",
-          '11': "fuchsia",
-          '12': "charteuse"
+colors = {'0': [255, 255, 255],  # white
+          '1': [255, 0, 0],
+          '2': [240, 5, 10],
+          '3': [225, 10, 20],
+          '4': [210, 15, 30],
+          '5': [195, 20, 40],
+          '6': [180, 25, 50],
+          '7': [165, 35, 60],
+          '8': [150, 40, 70],
+          '9': [135, 45, 80],
+          '10': [120, 50, 90],
+          '11': [105, 55, 100],
+          '12': [90, 60, 110],
+          '13': [75, 65, 120],
+          '14': [60, 70, 130],
+          '15': [45, 75, 140],
+
+          '16': [0, 255, 0],
+          '17': [10, 240, 5],
+          '18': [20, 225, 10],
+          '19': [30, 210, 15],
+          '20': [40, 195, 20],
+          '21': [50, 180, 25],
+          '22': [60, 165, 35],
+          '23': [70, 150, 40],
+          '24': [80, 135, 45],
+          '25': [90, 120, 50],
+          '26': [100, 105, 55],
+          '27': [110, 90, 60],
+          '28': [120, 75, 65],
+          '29': [130, 60, 70],
+          '30': [140, 45, 75],
+
+          '31': [0, 0, 255],
+          '32': [5, 10, 240],
+          '33': [10, 20, 225],
+          '34': [15, 30, 210],
+          '35': [20, 40, 195],
+          '36': [25, 50, 180],
+          '37': [35, 60, 165],
+          '38': [40, 70, 150],
+          '39': [45, 80, 135],
+          '40': [50, 90, 120],
+          '41': [55, 100, 105],
+          '42': [60, 110, 90],
+          '43': [65, 120, 75],
+          '44': [70, 130, 60],
+          '45': [75, 140, 45],
+
+          '46': [44, 44, 44],
+          '47': [90, 60, 90],
+          '48': [33, 33, 33],
+          '49': [66, 66, 66],
+          '50': [99, 99, 99],
+          '51': [19, 210, 255],
+
           }
 
 # ************************************************************************
-
-class FrontEnd:
+class CellularAutomata:
     def __init__(self):
-        self.rows = 100
-        self.columns = 100
-        self.data = np.zeros([self.rows, self.columns], dtype=int)
-
-        self.w = Canvas(window, height=self.rows, width=self.columns)
-        self.w.grid(row=5, column=0)
-        self.refresh()
-
-
-
-
-    def create_point(self, x, y, color):
-        print(x, y, color)
-        self.w.create_line(y, x, y + 1, x, fill=color)
-
-    def refresh(self):
-        # print(self.get())
-
-        for r in range(self.rows):
-            for c in range(self.columns-1):
-                # print(str(self.get()[r][c]))
-                self.create_point(r, c, colors[str(self.get()[r][c])])
-        time.sleep(0.5)
-        window.update_idletasks()
-        window.update()
-
-
-        # print(self.get())
-        # print(self.get())
+        self.rows = 500
+        self.columns = 500
+        self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
 
     def set(self, newData):
         self.data = newData
         self.rows = newData.shape[0]
         self.columns = newData.shape[1]
-        self.w = Canvas(window, width=self.columns, height=self.rows)
-        self.refresh()
 
     def get(self):
         return self.data
 
-    def generateSeed(self):
-        array = np.zeros([self.rows, self.columns], dtype=int)
-        # print(f'\n\n Seed generation')
-        for i in range(100):
-            a = randint(1, 100)
-            r = randint(0, self.rows - 1)
-            c = randint(0, self.columns - 1)
-            array[r][c] = a % 2 + 1
-        self.set(array)
+
+
+
+class FrontEnd:
+    CA = CellularAutomata()
+
+    def __init__(self):
+        self.is_procedure = False
+        self.grain_quantity = 50
+
+    def set(self, newData):
+        self.CA.set(newData)
+        self.w = Canvas(window, width=self.CA.columns, height=self.CA.rows)
+
+    def get(self):
+        return self.CA.get()
 
     def dilatate(self):
-        array = self.data
-        array_new = np.zeros([array.shape[0], array.shape[1]], dtype=int)
+        array = self.get()
+        array_new = np.zeros([array.shape[0], array.shape[1]], dtype=np.uint8)
+
         for r in range(0, array.shape[0]):
             for c in range(0, array.shape[1]):
                 main_new = array[r][c]
@@ -148,18 +174,51 @@ class FrontEnd:
                     main_new = main_new
 
                 array_new[r][c] = main_new
-        self.data = array_new
-        self.refresh()
+        self.set(array_new)
 
-    def dilatate_ALL(self):
-        while 1:
-            # plt.imshow(self.data)
-            if self.data.all() == 0:
-                self.dilatate()
-                self.get()
-            else:
-                # plt.show()
-                break
+    def dilatate_is_procedure(self):
+        self.is_procedure = not self.is_procedure
+
+    def generateSeed(self, grains):
+        self.is_procedure = False
+        self.grain_quantity = int(grains)
+        array = np.zeros([self.CA.rows, self.CA.columns], dtype=np.uint8)
+        # print(f'\n\n Seed generation')
+        for color in range(self.grain_quantity):
+            r = randint(0, self.CA.rows - 1)
+            c = randint(0, self.CA.columns - 1)
+            array[r][c] = color
+        self.set(array)
+
+    def mappingToImage(self):
+        img = np.zeros([self.get().shape[0], self.get().shape[1], 3], dtype=np.uint8)
+        array = self.get()
+        for r in range(0, array.shape[0]):
+            for c in range(0, array.shape[1]):
+                id = array[r][c]
+                img[r][c] = [0, 0, 0]
+                # print("OK")
+                # print(img[r][c])
+                img[r][c] = colors[str(id)]
+        cv2.imshow("Callular Automata Image", img)
+
+    def refresh(self):
+        if self.is_procedure is True:
+            self.dilatate()
+        else:
+            pass
+
+        self.mappingToImage()
+        window.update_idletasks()
+        window.update()
+        # time.sleep(0.05)
+
+
+        # print(self.get())
+        # print(self.get())
+
+
+
 
 
 class Functionalities:
@@ -175,16 +234,22 @@ class Functionalities:
     def command_line_executioner(self):
         if self.operation == "Save":
             print('Saving')
-            # print(self.FE.get())
             self.saveFile(self.FE.get())
+        elif self.operation == "Export":
+            print('Exporting')
+            self.exportFile(self.FE.get())
         elif self.operation == "Open":
             print('Opening')
             self.FE.set(self.openFile())
         elif self.operation == "Seed":
-            print("Seeeeding")
-            print(f'OLD\n{self.FE.get()}')
-            self.FE.generateSeed()
-            print(f'NEW\n{self.FE.get()}')
+            print("Seeding")
+            self.FE.generateSeed(window.GRAIN.get())
+        elif self.operation == "Once":
+            print("Doing Once")
+            self.FE.dilatate()
+        elif self.operation == "Start/Pause":
+            print("Starting/Pausing the Procedure")
+            self.FE.dilatate_is_procedure()
         else:
             raise NameError
 
@@ -197,17 +262,32 @@ class Functionalities:
         with open(str(self.currentPath + r'\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
             np.savetxt(file_s, data, delimiter=',', fmt='%d')
 
+    def exportFile(self, data):
+        self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        if window.PATH_EXPORT.get() == '':
+            self.fileName = f'Export_{self.timeNow}'
+        else:
+            self.fileName = window.PATH_EXPORT.get()
+
+        array = []
+        with open(str(self.currentPath + r'\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
+            for r in range(data.shape[0]):
+                for c in range(data.shape[1]):
+                    new = [r, c, data[r][c]]
+                    array.append(new)
+            np.savetxt(file_s, array, delimiter=',', fmt='%d')
+
     def openFile(self):
         path = filedialog.askopenfilename(filetypes=(("*.csv", "*.csv"), ("All files", "*.*")))
         self.fileName = os.path.split(path)[-1]
         PATH_OPEN_value.set(self.fileName)
-        return np.loadtxt(path, delimiter=',', dtype=int)
+        return np.loadtxt(path, delimiter=',', dtype=np.uint8)
 
 class ButtonCreator(Functionalities):
     def __init__(self, name, r, c):
         super().__init__()
         self.operation = name
-        self.button = Button(window, text=self.operation, command=self.command_line_executioner, height=1, width=7)
+        self.button = Button(window, text=self.operation, command=self.command_line_executioner, height=1, width=8)
         self.button.grid(row=r, column=c)
 
 
@@ -215,16 +295,25 @@ ButtonCreator("Save", 0, 1)
 window.PATH_SAVE = Entry(window, textvariable=None)
 window.PATH_SAVE.grid(row=0, column=0)
 
-ButtonCreator("Open", 1, 1)
+ButtonCreator("Export", 1, 1)
+window.PATH_EXPORT = Entry(window, textvariable=None)
+window.PATH_EXPORT.grid(row=1, column=0)
+
+ButtonCreator("Open", 2, 1)
 PATH_OPEN_value = StringVar()
 PATH_OPEN_value.set("New")
 window.PATH_OPEN = Label(window, textvariable=PATH_OPEN_value)
-window.PATH_OPEN.grid(row=1, column=0)
+window.PATH_OPEN.grid(row=2, column=0)
 
-ButtonCreator("Seed", 2, 1)
+GRAIN_value = IntVar()
+GRAIN_value.set(50)
+window.GRAIN = Entry(window, textvariable=GRAIN_value)
+window.GRAIN.grid(row=0, column=2)
 
-fig = Figure(figsize=(5,5), dpi=100)
-a = fig.add_subplot(111)
+ButtonCreator("Seed", 0, 3)
+ButtonCreator("Once", 1, 3)
+ButtonCreator("Start/Pause", 2, 3)
+
 
 
 
@@ -278,14 +367,8 @@ a = fig.add_subplot(111)
 f = Functionalities()
 
 while 1:
-    a.plot(f.FE.get())
-    canvas = FigureCanvasTkAgg(fig, master=window)
-    canvas.draw()
-    canvas.get_tk_widget().grid(row=10, column=0)
-    f.FE.dilatate()
-    # f.FE.generateSeed()
-    # time.sleep(0.2)
-    # f.FE.dilatate_ALL()
+    f.FE.refresh()
+
 
 
 
