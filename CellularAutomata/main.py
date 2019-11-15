@@ -1,94 +1,112 @@
 import os
-import csv
-from pprint import pprint
-from random import randint
 
+from random import randint
 import numpy as np
 from datetime import datetime
 from tkinter import *
-import tkinter as tk
 from tkinter import filedialog
-import threading
-import time
 import cv2
+from scipy import ndimage
 
-from numpy.lib.stride_tricks import as_strided
 
 
 import matplotlib
 matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.figure import Figure
-from PIL import Image, ImageTk, ImageColor
+
 
 
 window = Tk()
 window.title('Cellular Automata Controls')
 # ************************************************************************
 colors = {'0': [255, 255, 255],  # white
-          '1': [255, 0, 0],
-          '2': [240, 5, 10],
-          '3': [225, 10, 20],
-          '4': [210, 15, 30],
-          '5': [195, 20, 40],
-          '6': [180, 25, 50],
-          '7': [165, 35, 60],
-          '8': [150, 40, 70],
-          '9': [135, 45, 80],
-          '10': [120, 50, 90],
-          '11': [105, 55, 100],
-          '12': [90, 60, 110],
-          '13': [75, 65, 120],
-          '14': [60, 70, 130],
-          '15': [45, 75, 140],
 
-          '16': [0, 255, 0],
-          '17': [10, 240, 5],
-          '18': [20, 225, 10],
-          '19': [30, 210, 15],
-          '20': [40, 195, 20],
-          '21': [50, 180, 25],
-          '22': [60, 165, 35],
-          '23': [70, 150, 40],
-          '24': [80, 135, 45],
-          '25': [90, 120, 50],
-          '26': [100, 105, 55],
-          '27': [110, 90, 60],
-          '28': [120, 75, 65],
-          '29': [130, 60, 70],
-          '30': [140, 45, 75],
+          '1':  [255,  45, 150],
+          '2':  [240,  60, 135],
+          '3':  [225,  75, 120],
+          '4':  [210,  90, 105],
+          '5':  [195, 105,  90],
+          '6':  [180, 120,  75],
+          '7':  [165, 135,  60],
+          '8':  [150, 150,  45],
+          '9':  [135, 165, 255],
+          '10': [120, 180, 240],
+          '11': [105, 195, 225],
+          '12': [ 90, 210, 210],
+          '13': [ 75, 225, 195],
+          '14': [ 60, 240, 180],
+          '15': [ 45, 255, 165],
 
-          '31': [0, 0, 255],
-          '32': [5, 10, 240],
-          '33': [10, 20, 225],
-          '34': [15, 30, 210],
-          '35': [20, 40, 195],
-          '36': [25, 50, 180],
-          '37': [35, 60, 165],
-          '38': [40, 70, 150],
-          '39': [45, 80, 135],
-          '40': [50, 90, 120],
-          '41': [55, 100, 105],
-          '42': [60, 110, 90],
-          '43': [65, 120, 75],
-          '44': [70, 130, 60],
-          '45': [75, 140, 45],
+          '16': [ 150, 255,  45],
+          '17': [ 135, 240,  60],
+          '18': [ 120, 225,  75],
+          '19': [ 105, 210,  90],
+          '20': [  90, 195, 105],
+          '21': [  75, 180, 120],
+          '22': [  60, 165, 135],
+          '23': [  45, 150, 150],
+          '24': [ 255, 135, 165],
+          '25': [ 240, 120, 180],
+          '26': [ 225, 105, 195],
+          '27': [ 210,  90, 210],
+          '28': [ 195,  75, 225],
+          '29': [ 180,  60, 240],
+          '30': [ 165,  45, 255],
 
-          '46': [44, 44, 44],
-          '47': [90, 60, 90],
-          '48': [33, 33, 33],
-          '49': [66, 66, 66],
-          '50': [99, 99, 99],
-          '51': [19, 210, 255],
+          '31': [ 45,  150, 255],
+          '32': [ 60,  135, 240],
+          '33': [ 75,  120, 225],
+          '34': [ 90,  105, 210],
+          '35': [105,   90, 195],
+          '36': [120,   75, 180],
+          '37': [135,   60, 165],
+          '38': [150,   45, 150],
+          '39': [165,  255, 135],
+          '40': [180,  240, 120],
+          '41': [195,  225, 105],
+          '42': [210,  210,  90],
+          '43': [225,  195,  75],
+          '44': [240,  180,  60],
+          '45': [255,  165,  45],
+
+          '46': [222,  44,  11],
+          '47': [ 90,  6,  90],
+          '48': [190,  0,  33],
+          '49': [ 15,  66, 150],
+          '50': [ 99, 225,   8],
+          '51': [ 19, 210, 255],
 
           }
 
 # ************************************************************************
 class CellularAutomata:
+    KERNEL_MOOR = np.ones([3, 3], dtype=np.uint8)
+    KERNEL_CROSS = np.array([[0, 1, 0],
+                             [1, 1, 1],
+                             [0, 1, 0]])
+    KERNEL_PENTA_LEFT = np.array([[0, 1, 1],
+                                  [0, 1, 1],
+                                  [0, 1, 1]])
+    KERNEL_PENTA_RIGHT = np.array([[1, 1, 0],
+                                   [1, 1, 0],
+                                   [1, 1, 0]])
+    KERNEL_HEXA_LEFT = np.array([[0, 1, 1],
+                                 [1, 1, 1],
+                                 [1, 1, 0]])
+    KERNEL_HEXA_RIGHT = np.array([[1, 1, 0],
+                                  [1, 1, 1],
+                                  [0, 1, 1]])
+    KERNEL = [KERNEL_MOOR, KERNEL_CROSS, KERNEL_PENTA_LEFT, KERNEL_PENTA_RIGHT, KERNEL_HEXA_LEFT, KERNEL_HEXA_RIGHT]
+    ROWS_NO = 500
+    COLUMNS_NO = 500
+
     def __init__(self):
-        self.rows = 500
-        self.columns = 500
+        self.rows = self.ROWS_NO
+        self.columns = self.COLUMNS_NO
+        self.kernel = self.KERNEL_MOOR
         self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        self.is_procedure = False
+        self.grain_quantity = 50
+        self.is_random = 0
 
     def set(self, newData):
         self.data = newData
@@ -98,97 +116,66 @@ class CellularAutomata:
     def get(self):
         return self.data
 
+    def reset(self):
+        self.rows = self.ROWS_NO
+        self.columns = self.COLUMNS_NO
+        self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
 
+    def updateKernel(self):
+        if self.is_random == 1:
+            i = randint(0, 100)
+            i %= 4
+            i %= 2
 
-
-class FrontEnd:
-    CA = CellularAutomata()
-
-    def __init__(self):
-        self.is_procedure = False
-        self.grain_quantity = 50
-
-    def set(self, newData):
-        self.CA.set(newData)
-        self.w = Canvas(window, width=self.CA.columns, height=self.CA.rows)
-
-    def get(self):
-        return self.CA.get()
-
-    def dilatate(self):
-        array = self.get()
-        array_new = np.zeros([array.shape[0], array.shape[1]], dtype=np.uint8)
-
-        for r in range(0, array.shape[0]):
-            for c in range(0, array.shape[1]):
-                main_new = array[r][c]
-
-                if main_new == 0:
-                    try:
-                        UL = array[r - 1][c - 1]
-                    except:
-                        UL = 0
-                    try:
-                        UU = array[r - 1][c]
-                    except:
-                        UU = 0
-                    try:
-                        UR = array[r - 1][c + 1]
-                    except:
-                        UR = 0
-
-                    try:
-                        LL = array[r][c - 1]
-                    except:
-                        LL = 0
-                    try:
-                        RR = array[r][c + 1]
-                    except:
-                        RR = 0
-
-                    try:
-                        DL = array[r + 1][c - 1]
-                    except:
-                        DL = 0
-                    try:
-                        DD = array[r + 1][c]
-                    except:
-                        DD = 0
-
-                    try:
-                        DR = array[r + 1][c + 1]
-                    except:
-                        DR = 0
-
-                    temp = [UL, UU, UR, LL, RR, DL, DD, DR]
-                    if any(temp) != 0:
-                        for x in temp:
-                            if x == 0:
-                                pass
-                            else:
-                                main_new = x  # powinno brać to z największą ilością
-
-                    else:
-                        main_new = 0
-                else:
-                    main_new = main_new
-
-                array_new[r][c] = main_new
-        self.set(array_new)
-
-    def dilatate_is_procedure(self):
-        self.is_procedure = not self.is_procedure
+            if np.array_equal(self.kernel, self.KERNEL_MOOR) or np.array_equal(self.kernel, self.KERNEL_CROSS):
+                self.kernel = self.kernel
+            elif np.array_equal(self.kernel, self.KERNEL_PENTA_LEFT):
+                self.kernel = self.KERNEL[2+i]
+            elif np.array_equal(self.kernel, self.KERNEL_PENTA_RIGHT):
+                self.kernel = self.KERNEL[3-i]
+            elif np.array_equal(self.kernel, self.KERNEL_HEXA_LEFT):
+                self.kernel = self.KERNEL[4+i]
+            elif np.array_equal(self.kernel, self.KERNEL_HEXA_RIGHT):
+                self.kernel = self.KERNEL[5-i]
+            else:
+                print("ERROR")
+        else:
+            self.kernel = self.kernel
 
     def generateSeed(self, grains):
         self.is_procedure = False
         self.grain_quantity = int(grains)
-        array = np.zeros([self.CA.rows, self.CA.columns], dtype=np.uint8)
+        array = np.zeros([self.rows, self.columns], dtype=np.uint8)
         # print(f'\n\n Seed generation')
         for color in range(self.grain_quantity):
-            r = randint(0, self.CA.rows - 1)
-            c = randint(0, self.CA.columns - 1)
-            array[r][c] = color
+            r = randint(0, self.rows - 1)
+            c = randint(0, self.columns - 1)
+            array[r][c] = color % 51 + 1
         self.set(array)
+
+    def dilatate_is_procedure(self):
+        self.is_procedure = not self.is_procedure
+
+    def dilatate(self):
+        array = self.get()
+
+        dilation = ndimage.grey_dilation(array, footprint=self.kernel)
+        self.updateKernel()
+        array_new = np.array([[array[x][y] if array[x][y] != 0 else dilation[x][y] for y in range(array.shape[1])] for x in range(array.shape[0])])
+
+        if np.array_equal(np.array(array_new), np.array(self.get())):
+            self.is_procedure = 0
+            print("END")
+        else:
+            self.is_procedure = self.is_procedure
+
+        self.set(array_new)
+
+
+class FrontEnd(CellularAutomata):
+    def __init__(self):
+        super().__init__()
+        self.img = np.zeros([self.get().shape[0], self.get().shape[1], 3], dtype=np.uint8)
 
     def mappingToImage(self):
         img = np.zeros([self.get().shape[0], self.get().shape[1], 3], dtype=np.uint8)
@@ -197,28 +184,21 @@ class FrontEnd:
             for c in range(0, array.shape[1]):
                 id = array[r][c]
                 img[r][c] = [0, 0, 0]
-                # print("OK")
-                # print(img[r][c])
                 img[r][c] = colors[str(id)]
-        cv2.imshow("Callular Automata Image", img)
+        self.img = img
+
+    def showImage(self):
+        cv2.imshow("Callular Automata Image", self.img)
 
     def refresh(self):
+        # print(f'0 {datetime.now()}')
         if self.is_procedure is True:
             self.dilatate()
         else:
-            pass
-
-        self.mappingToImage()
+            self.mappingToImage()
+            self.showImage()
         window.update_idletasks()
         window.update()
-        # time.sleep(0.05)
-
-
-        # print(self.get())
-        # print(self.get())
-
-
-
 
 
 class Functionalities:
@@ -243,13 +223,21 @@ class Functionalities:
             self.FE.set(self.openFile())
         elif self.operation == "Seed":
             print("Seeding")
+            print(window.LIST.curselection()[0])
             self.FE.generateSeed(window.GRAIN.get())
         elif self.operation == "Once":
             print("Doing Once")
+            self.FE.kernel = self.FE.KERNEL[window.LIST.curselection()[0]]
+            self.FE.is_random = RANDOM_BOX_VALUE.get()
             self.FE.dilatate()
         elif self.operation == "Start/Pause":
             print("Starting/Pausing the Procedure")
+            self.FE.kernel = self.FE.KERNEL[window.LIST.curselection()[0]]
+            self.FE.is_random = RANDOM_BOX_VALUE.get()
             self.FE.dilatate_is_procedure()
+        elif self.operation == "RST":
+            print("Resetting data")
+            self.FE.reset()
         else:
             raise NameError
 
@@ -305,18 +293,47 @@ PATH_OPEN_value.set("New")
 window.PATH_OPEN = Label(window, textvariable=PATH_OPEN_value)
 window.PATH_OPEN.grid(row=2, column=0)
 
+
+window.EMPTY1 = Label(window, width=15)
+window.EMPTY1.grid(row=0, column=3)
+
+
 GRAIN_value = IntVar()
 GRAIN_value.set(50)
 window.GRAIN = Entry(window, textvariable=GRAIN_value)
-window.GRAIN.grid(row=0, column=2)
+window.GRAIN.grid(row=0, column=4)
 
-ButtonCreator("Seed", 0, 3)
-ButtonCreator("Once", 1, 3)
-ButtonCreator("Start/Pause", 2, 3)
+window.LIST = Listbox(window, height=6, bd=1)
+window.LIST.insert(0, "MOOR")
+window.LIST.insert(1, "VON_NEUMANN")
+window.LIST.insert(2, "PENTA_LEFT")
+window.LIST.insert(3, "PENTA_RIGHT")
+window.LIST.insert(4, "HEXA_LEFT")
+window.LIST.insert(5, "HEXA_RIGHT")
+window.LIST.select_set(0)
+window.LIST.grid(row=3, column=4, rowspan=20)
 
 
+ButtonCreator("Seed", 0, 5)
+
+ButtonCreator("RST", 1, 5)
+
+window.EMPTY2 = Label(window, height=1)
+window.EMPTY2.grid(row=2, column=5)
+
+ButtonCreator("Once", 3, 5)
+
+ButtonCreator("Start/Pause", 4, 5)
+
+RANDOM_BOX_VALUE = IntVar()
+window.RANDOM_BOX = Checkbutton(window, text="Random", variable=RANDOM_BOX_VALUE)
+window.RANDOM_BOX.grid(row=5, column=5)
 
 
+f = Functionalities()
+
+while 1:
+    f.FE.refresh()
 
 
 '''
@@ -361,18 +378,3 @@ ButtonCreator("Start/Pause", 2, 3)
 # canvas.draw()
 # canvas.get_tk_widget().grid(row=5, column=0)
 '''
-
-
-
-f = Functionalities()
-
-while 1:
-    f.FE.refresh()
-
-
-
-
-
-
-
-
