@@ -315,7 +315,7 @@ colors = {0: [255, 255, 255],  # white
           300: [186, 36, 212]
           }
 
-KERNELS = {0: "MOOR",
+KERNELS = {0: "MOORE",
            1: "VON_NEUMANN",
            2: "PENTA_LEFT",
            3: "PENTA_RIGHT",
@@ -326,7 +326,7 @@ KERNELS = {0: "MOOR",
 class CellularAutomata:
     ROWS_NO = 500
     COLUMNS_NO = 500
-    KERNEL_MOOR = np.ones([3, 3], dtype=np.uint8)
+    KERNEL_MOORE = np.ones([3, 3], dtype=np.uint8)
     KERNEL_CROSS = np.array([[0, 1, 0],
                              [1, 1, 1],
                              [0, 1, 0]])
@@ -342,13 +342,13 @@ class CellularAutomata:
     KERNEL_HEXA_RIGHT = np.array([[1, 1, 0],
                                   [1, 1, 1],
                                   [0, 1, 1]])
-    KERNEL = [KERNEL_MOOR, KERNEL_CROSS, KERNEL_PENTA_LEFT, KERNEL_PENTA_RIGHT, KERNEL_HEXA_LEFT, KERNEL_HEXA_RIGHT]
+    KERNEL = [KERNEL_MOORE, KERNEL_CROSS, KERNEL_PENTA_LEFT, KERNEL_PENTA_RIGHT, KERNEL_HEXA_LEFT, KERNEL_HEXA_RIGHT]
     TYPES = ["constant", "wrap"]
 
     def __init__(self):
         self.rows = self.ROWS_NO
         self.columns = self.COLUMNS_NO
-        self.kernel = self.KERNEL_MOOR
+        self.kernel = self.KERNEL_MOORE
         self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
         self.type = self.TYPES[0]
         self.is_procedure = False
@@ -375,7 +375,7 @@ class CellularAutomata:
             i %= 4
             i %= 2
 
-            if np.array_equal(self.kernel, self.KERNEL_MOOR) or np.array_equal(self.kernel, self.KERNEL_CROSS):
+            if np.array_equal(self.kernel, self.KERNEL_MOORE) or np.array_equal(self.kernel, self.KERNEL_CROSS):
                 self.kernel = self.kernel
             elif np.array_equal(self.kernel, self.KERNEL_PENTA_LEFT):
                 self.kernel = self.KERNEL[2+i]
@@ -416,7 +416,7 @@ class CellularAutomata:
         if np.array_equal(np.array(array_new), np.array(self.get())):
             self.no_changes_counter += 1
             if self.no_changes_counter >= 10:
-                print("END - due to no changes (same for {self.no_changes_counter} times. CA is not complete")
+                print(f"END - due to no changes (same for {self.no_changes_counter} times. CA is not complete")
                 self.is_procedure = 0
             else:
                 pass
@@ -520,7 +520,7 @@ class Functionalities:
             self.fileName = f'CellularAutomata_{self.timeNow}'
         else:
             self.fileName = window.PATH_SAVE.get()
-        with open(str(self.currentPath + r'\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
+        with open(str(self.currentPath + r'\\Data\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
             np.savetxt(file_s, data, delimiter=',', fmt='%d')
 
     def exportFile(self, data, image):
@@ -641,7 +641,7 @@ ButtonCreator(window.f23, "RST")
 # -----------END---Start-up---END-----------
 
 # -----------------Generation-----------------
-window.lf3 = LabelFrame(wrapper1, text="Generation")
+window.lf3 = LabelFrame(wrapper1, text="Generation", width=500, height=500)
 window.lf3.pack(side=RIGHT, ipady=2)
 
 window.f30 = Frame(window.lf3)
