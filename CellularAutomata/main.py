@@ -1,5 +1,8 @@
 import os
 import csv
+from pprint import pprint
+from random import randint
+
 import numpy as np
 from datetime import datetime
 from tkinter import *
@@ -17,39 +20,86 @@ from PIL import Image, ImageTk, ImageColor
 window = Tk()
 window.title('Cellular Automata')
 # ************************************************************************
-
+colors = {'0': 'white',
+          '1': 'red',
+          '2': 'black',
+          '3': 'orange',
+          '4': 'purple',
+          '5': 'yellow',
+          '6': 'pink',
+          '7': 'blue',
+          }
 
 # ************************************************************************
 
-
-
 class CellularAutomata:
     def __init__(self):
-        self.data = np.zeros([50, 50], dtype=int)
+        self.rows = 50
+        self.columns = 50
+        self.data = np.zeros([self.rows, self.columns], dtype=int)
+        self.generateSeed()
 
     def get(self):
         return self.data
 
-    def refresh(self):
-        pass
-
     def set(self, newData):
         self.data = newData
+
+    def generateSeed(self):
+        for i in range(990):
+            a = randint(0, 7)
+            r = randint(0, self.rows - 1)
+            c = randint(0, self.columns - 1)
+            self.data[r][c] = a
+
+
+class FrontEnd(CellularAutomata):
+    def __init__(self):
+        super().__init__()
+        self.w = Canvas(window, width=self.columns, height=self.rows)
+        self.w.grid(row=5, column=0)
         self.refresh()
 
+    def create_point(self, x, y, color):
+        self.w.create_line(y, x, y + 1, x, fill=color)
+
+    def refresh(self):
+        for r in range(self.data.shape[0]):
+            for c in range(self.data.shape[1]):
+                self.create_point(r, c, colors[str(self.data[r][c])])
+
+    def set(self, data):
+        self.data = data
+        self.refresh()
+
+    def get(self):
+        return self.data
 
 
-
-class FileOps:
+class Functionalities(CellularAutomata):
     def __init__(self):
+        CellularAutomata.__init__(self)
+        self.operation = None
         self.timeNow = None
         self.fileName = None
         self.currentPath = os.path.dirname(__file__)
-        # super().__init__()
+
+
+    def command_line_executioner(self):
+        if self.operation == "Save":
+            print('Saving')
+            self.saveFile(CellularAutomata.get(self))
+        elif self.operation == "Open":
+            print('Opening')
+            CellularAutomata.set(self, self.openFile())
+        elif self.operation == "Seed":
+            print("Seeeeding")
+            CellularAutomata.generateSeed(self)
+        else:
+            raise NameError
 
     def saveFile(self, data):
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        print(window.PATH_SAVE.get())
         if window.PATH_SAVE.get() == '':
             self.fileName = f'CellularAutomata_{self.timeNow}'
         else:
@@ -61,28 +111,7 @@ class FileOps:
         path = filedialog.askopenfilename(filetypes=(("*.csv", "*.csv"), ("All files", "*.*")))
         self.fileName = os.path.split(path)[-1]
         PATH_OPEN_value.set(self.fileName)
-        print(np.loadtxt(path, delimiter=',', dtype=int))
-        CellularAutomata.get(self)
         return np.loadtxt(path, delimiter=',', dtype=int)
-
-
-
-class Functionalities(CellularAutomata, FileOps):
-    def __init__(self):
-        CellularAutomata.__init__(self)
-        FileOps.__init__(self)
-        self.operation = None
-
-    def command_line_executioner(self):
-        if self.operation == "Save":
-            self.saveFile(self.data)
-            print('Saving')
-        elif self.operation == "Open":
-            self.data = self.openFile()
-            print('Opening')
-        else:
-            raise NameError
-
 
 class ButtonCreator(Functionalities):
     def __init__(self, name, r, c):
@@ -91,7 +120,14 @@ class ButtonCreator(Functionalities):
         self.button = Button(window, text=self.operation, command=self.command_line_executioner, height=1, width=7)
         self.button.grid(row=r, column=c)
 
+class ALL(Functionalities, FrontEnd, CellularAutomata):
+    def __init__(self):
+        Functionalities.__init__()
+        FrontEnd.__init__()
+        CellularAutomata.__init__()
 
+    def doStuuf(self):
+        pass
 ButtonCreator("Save", 0, 1)
 window.PATH_SAVE = Entry(window, textvariable=None)
 window.PATH_SAVE.grid(row=0, column=0)
@@ -102,32 +138,15 @@ PATH_OPEN_value.set("New")
 window.PATH_OPEN = Label(window, textvariable=PATH_OPEN_value)
 window.PATH_OPEN.grid(row=1, column=0)
 
+ButtonCreator("Seed", 2, 1)
 
 
-def create_point(x, y, color):
-    # mapping kolorów z ID na hex
-    w.create_line(y, x, y + 1, x, fill=color)
+CA = CellularAutomata()
+disp = FrontEnd()
 
 
-rows = 50
-columns = 50
-a = 0
-array = np.zeros([rows, columns], dtype=int)
-w = Canvas(window, width=columns, height=rows)
-w.grid(row=5, column=0)
-w.bind("<B1-Motion>")
-a = 0
-b = 0
-c = 0
 
 
-for i in np.arange(0, rows-1):
-    for j in np.arange(1, columns-1):
-        create_point(i, j, '#0000' + str(a%10) + '0')
-
-    a += 1
-    b += 2
-    c += 3
 
 
 
@@ -184,16 +203,18 @@ def GUI():
 
 
 def update_of_CA():
-    pass
-    # PATH_OPEN_value.set("a")
+    disp.refresh()
+    # pprint(disp.data)
+    print("refreshing")
 
 
 while 1:
-    time.sleep(0.01)
-    t1 = threading.Thread(target=update_of_CA())
+    time.sleep(0.2)
     t2 = threading.Thread(target=GUI())
 
-    t1.start()
+    t1 = threading.Thread(target=update_of_CA())
+
     t2.start()
-    t1.join()
+    t1.start()
     t2.join()
+    t1.join()
