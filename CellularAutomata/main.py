@@ -674,8 +674,8 @@ window.RANDOM_BOX.pack(side=LEFT)
 window.f33 = Frame(window.lf3)
 window.f33.pack(pady=2, fill=X)
 WRAP_VALUE = IntVar()
-window.RANDOM_BOX = Checkbutton(window.f33, text="Wrap?", variable=WRAP_VALUE)
-window.RANDOM_BOX.pack(side=LEFT)
+window.WRAP = Checkbutton(window.f33, text="Wrap?", variable=WRAP_VALUE)
+window.WRAP.pack(side=LEFT)
 
 window.f34 = Frame(window.lf3)
 window.f34.pack(pady=2, fill=X)
@@ -701,9 +701,11 @@ while 1:
     # print(list(KERNELS.values()).index(KERNEL_CURR_VALUE.get()))
     if f.FE.is_procedure == 1:
         window.RANDOM_BOX.config(state='disabled')
+        window.WRAP.config(state='disabled')
         window.LIST.config(state='disabled')
     else:
         window.RANDOM_BOX.config(state='normal')
+        window.WRAP.config(state='normal')
         window.LIST.config(state='normal')
 
     window.update_idletasks()
