@@ -13,7 +13,7 @@ window = Tk()
 window.title('Cellular Automata Controls')
 # ************************************************************************
 colors = {0: [255, 255, 255],  # white
-          1: [88, 26, 167],
+          1: [0, 0, 0],
           2: [54, 58, 99],
           3: [220, 110, 61],
           4: [109, 29, 196],
@@ -312,7 +312,8 @@ colors = {0: [255, 255, 255],  # white
           297: [75, 85, 149],
           298: [82, 145, 192],
           299: [79, 87, 152],
-          300: [186, 36, 212]
+          300: [186, 36, 212],
+          301: [88, 26, 167]
           }
 
 KERNELS = {0: "MOORE",
@@ -355,6 +356,9 @@ class CellularAutomata:
         self.grain_quantity = 50
         self.is_random = 0
         self.no_changes_counter = 0
+        self.inclusions_q = 1
+        self.inclusions_r_min = 1
+        self.inclusions_r_max = 10
 
     def set(self, newData):
         self.data = newData
@@ -368,6 +372,11 @@ class CellularAutomata:
         self.rows = self.ROWS_NO
         self.columns = self.COLUMNS_NO
         self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        self.is_procedure = False
+
+    def init(self):
+        self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        self.is_procedure = False
 
     def update_kernel(self):
         if self.is_random == 1:
@@ -390,15 +399,77 @@ class CellularAutomata:
         else:
             self.kernel = self.kernel
 
+    def only_inclusions(self):
+        a = self.data
+        a = np.array([[a[r][c] if a[r][c] == 1 else 0 for c in range(self.columns)] for r in range(self.rows)])
+        return a
+
+    def only_grains(self):
+        a = self.data
+        a = np.array([[a[r][c] if a[r][c] != 1 else 0 for c in range(self.columns)] for r in range(self.rows)])
+        return a
+
+    def create_circular_mask(self, h, w, center=None, radius=None):
+
+        if center is None:  # use the middle of the image
+            center = [int(w / 2), int(h / 2)]
+        if radius is None:  # use the smallest distance between the center and image walls
+            radius = min(center[0], center[1], w - center[0], h - center[1])
+
+        Y, X = np.ogrid[:h, :w]
+        dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
+
+        mask = dist_from_center <= radius
+        return mask
+
+    def gen_circle(self, cx, cy, radius=None):
+        a = self.get()
+        if radius == 0.5:
+            a[cy, cx] = 1
+        else:
+            radius = int(radius)
+            a[self.create_circular_mask(self.rows, self.columns, [cy, cx], radius)] = 1
+            # y, x = np.ogrid[-radius: radius, -radius: radius]
+            # index = x ** 2 + y ** 2 <= radius ** 2
+            # a[max(cy - radius, 0):min(cy + radius, self.rows), max(cx - radius, 0):min(cx + radius, self.columns)][index] = 1
+        self.set(np.array(a))
+
+    def generate_inclusions(self):
+        array = self.only_grains()
+        self.set(array)
+        for i in range(self.inclusions_q):
+            array = self.get()
+            r = randint(self.inclusions_r_min, self.inclusions_r_max)
+            watch_dog = 100
+            while watch_dog:
+                watch_dog -= 1
+                if watch_dog == 0:
+                    raise Exception("Cannot find place for inclusion")
+                y = randint(0, self.rows-1)
+                x = randint(0, self.columns-1)
+                if array[y][x] == 0:
+                    self.gen_circle(x, y, r)
+                    break
+                else:
+                    pass
+
     def generate_seed(self, grains):
-        self.is_procedure = False
         self.grain_quantity = int(grains)
-        array = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        array = self.only_inclusions()
+        self.set(array)
         # print(f'\n\n Seed generation')
-        for color in range(self.grain_quantity):
-            r = randint(0, self.rows - 1)
-            c = randint(0, self.columns - 1)
-            array[r][c] = color % 51 + 1
+        for grainID in range(self.grain_quantity):
+            watch_dog = 1000
+            while watch_dog:
+                watch_dog -= 1
+                r = randint(0, self.rows - 1)
+                c = randint(0, self.columns - 1)
+                if array[r][c] != 0 or array[r][c] == 1:
+                    if watch_dog == 0:
+                        raise Exception("Cannot find enough free space to insert every seed")
+                else:
+                    array[r][c] = grainID + 2
+                    break
         self.set(array)
 
     def dilatate_is_procedure(self):
@@ -407,12 +478,16 @@ class CellularAutomata:
     def dilatate(self):
         array = self.get()
 
-        dilation = ndimage.grey_dilation(array, footprint=self.kernel, mode='constant') if self.type == 0 \
-            else ndimage.grey_dilation(array, footprint=self.kernel, mode='wrap')
-        self.update_kernel()
-        array_new = np.array([[array[x][y] if array[x][y] != 0 else dilation[x][y] for y in range(array.shape[1])]
+        arr_inclusions = np.array([[array[x][y] if (array[x][y] == 1) else 0 for y in range(array.shape[1])]
                               for x in range(array.shape[0])])
-
+        array_only_grains = array - arr_inclusions
+        dilation = ndimage.grey_dilation(array_only_grains, footprint=self.kernel, mode='constant') if self.type == 0 \
+            else ndimage.grey_dilation(array_only_grains, footprint=self.kernel, mode='wrap')
+        self.update_kernel()
+        array_new = np.array([[array[x][y] if (array[x][y] != 0 or array[x][y] == 1) else dilation[x][y] for y in range(array.shape[1])]
+                              for x in range(array.shape[0])])
+        array_new = np.array([[array_new[x][y] if array[x][y] != 1 else arr_inclusions[x][y] for y in range(array.shape[1])]
+                              for x in range(array.shape[0])])
         if np.array_equal(np.array(array_new), np.array(self.get())):
             self.no_changes_counter += 1
             if self.no_changes_counter >= 10:
@@ -435,25 +510,27 @@ class CellularAutomata:
 
 
 class FrontEnd(CellularAutomata):
-
-
     def __init__(self):
         super().__init__()
         self.img = np.zeros([self.get().shape[0], self.get().shape[1], 3], dtype=np.uint8)
+        cv2.imshow("Callular Automata Image", self.img)
         b, g, r = cv2.split(self.img)
         self.show = cv2.merge((r, g, b))
         self.show = Image.fromarray(self.show)
         self.refresh()
 
-    def map_to_image(self):
-        array = self.get()
-        img = np.array([[colors[array[r][c]] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
-        # cv2.imshow("Callular Automata Image", self.img)
+    def map_to_image(self, array=None):
+        if array is None:
+            array = self.get()
+        else:
+            pass
+        img = np.array([[colors[array[r][c] % 301] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
+        print(self.img)
+        cv2.imshow("Callular Automata Image", self.img)
         b, g, r = cv2.split(img)
         img = cv2.merge((r, g, b))
         self.img = img
         return img
-
 
     def refresh(self):
         # print(f'0 {datetime.now()}')
@@ -465,7 +542,6 @@ class FrontEnd(CellularAutomata):
         self.show = self.map_to_image()
         return self.show
 
-
 class Functionalities:
     FE = FrontEnd()
 
@@ -475,24 +551,37 @@ class Functionalities:
         self.fileName = None
         self.currentPath = os.path.dirname(__file__)
 
-
     def command_line_executioner(self):
         if self.operation == "Save":
             print('Saving')
             self.saveFile(self.FE.get())
         elif self.operation == "Export":
             print('Exporting')
-            self.exportFile(self.FE.get(), self.FE.map_to_image())
+            self.exportFile(self.FE.get())
         elif self.operation == "Open":
             print('Opening')
             self.FE.set(self.openFile())
-        elif self.operation == "Seed":
-            print("Seeding")
-            self.FE.reset()
+        elif self.operation == "Initialize":
+            print("Initializing")
             self.FE.rows = ROWS_VALUE.get()
             self.FE.columns = COLUMNS_VALUE.get()
+            self.FE.init()
+        elif self.operation == "Inclusions":
+            print("Inclusions generation")
+            self.FE.is_procedure = 0
+            self.FE.inclusions_q = QUANTITY_INCLUSIONS_VALUE.get()
+            self.FE.inclusions_r_min = MIN_INCLUSIONS_VALUE.get()
+            self.FE.inclusions_r_max = MAX_INCLUSIONS_VALUE.get()
+            self.FE.generate_inclusions()
+        elif self.operation == "Seed":
+            print("Seeding")
+            # self.FE.reset()
+            # self.FE.rows = ROWS_VALUE.get()
+            # self.FE.columns = COLUMNS_VALUE.get()
+
             # print(self.FE.KERNEL[list(KERNELS.values()).index(KERNEL_CURR_VALUE.get())])
             # self.FE.kernel = self.FE.KERNEL[list(KERNELS.values()).index(KERNEL_CURR_VALUE.get())]
+            self.FE.is_procedure = 0
             self.FE.generate_seed(window.GRAIN.get())
         elif self.operation == "Once":
             print("Doing Once")
@@ -513,37 +602,69 @@ class Functionalities:
         self.FE.is_random = RANDOM_BOX_VALUE.get()
         self.FE.type = WRAP_VALUE.get()
 
-
     def saveFile(self, data):
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        if MERGED_VALUE.get() == 1:
+            add_name = "merged"
+            data = data
+        elif GRAINS_VALUE.get() == 1:
+            add_name = "grains"
+            data = self.FE.only_grains()
+        elif INCLUSIONS_VALUE.get() == 1:
+            add_name = "inclusions"
+            data = self.FE.only_inclusions()
+        else:
+            MERGED_VALUE.set(1)
+            add_name = "merged"
+            data = data
+
         if window.PATH_SAVE.get() == '':
-            self.fileName = f'CellularAutomata_{self.timeNow}'
+            self.fileName = f'CA_{add_name}_{self.timeNow}'
         else:
             self.fileName = window.PATH_SAVE.get()
         with open(str(self.currentPath + r'\\Data\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
             np.savetxt(file_s, data, delimiter=',', fmt='%d')
 
-    def exportFile(self, data, image):
+    def exportFile(self, data):
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        if MERGED_VALUE.get() == 1:
+            add_name = "merged"
+            data = data
+            image = self.FE.map_to_image()
+        elif GRAINS_VALUE.get() == 1:
+            add_name = "grains"
+            data = self.FE.only_grains()
+            image = self.FE.map_to_image(data)
+        elif INCLUSIONS_VALUE.get() == 1:
+            add_name = "inclusions"
+            data = self.FE.only_inclusions()
+            image = self.FE.map_to_image(data)
+        else:
+            MERGED_VALUE.set(1)
+            add_name = "merged"
+            data = data
+            image = self.FE.map_to_image()
+
         if window.PATH_EXPORT.get() == '':
-            self.fileName = f'Export_{self.timeNow}'
+            self.fileName = f'Export_{add_name}_{self.timeNow}'
         else:
             self.fileName = window.PATH_EXPORT.get()
 
         array = []
-        with open(str(self.currentPath + r'\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
+        with open(str(self.currentPath + r'\\Data\\CSVs\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
             for r in range(data.shape[0]):
                 for c in range(data.shape[1]):
                     new = [r, c, data[r][c]]
                     array.append(new)
             np.savetxt(file_s, array, delimiter=';', fmt='%d')
-        cv2.imwrite(self.currentPath + r'\\' + str(self.fileName) + '.png', image)
+        cv2.imwrite(self.currentPath + r'\\Data\\PNGs' + str(self.fileName) + '.png', image)
 
     def openFile(self):
         path = filedialog.askopenfilename(filetypes=(("*.csv", "*.csv"), ("All files", "*.*")))
         self.fileName = os.path.split(path)[-1]
         PATH_OPEN_value.set(self.fileName)
         return np.loadtxt(path, delimiter=',', dtype=np.uint8)
+
 
 class ButtonCreator(Functionalities):
     def __init__(self, w, name):
@@ -582,12 +703,26 @@ window.f02.pack(pady=2, fill=X)
 ButtonCreator(window.f02, "Open")
 PATH_OPEN_value = StringVar()
 PATH_OPEN_value.set("New")
-window.PATH_OPEN = Label(window.f02, textvariable=PATH_OPEN_value)
+window.PATH_OPEN = Label(window.f02, textvariable=PATH_OPEN_value, width=45, anchor=W)
 window.PATH_OPEN.pack(side=LEFT)
+
+window.f03 = Frame(window.lf0)
+window.f03.pack(pady=2, fill=X)
+GRAINS_VALUE = IntVar()
+window.GRAINS = Checkbutton(window.f03, text="Grains", variable=GRAINS_VALUE)
+window.GRAINS.pack(side=LEFT)
+
+INCLUSIONS_VALUE = IntVar()
+window.INCLUSIONS = Checkbutton(window.f03, text="Inclusions", variable=INCLUSIONS_VALUE)
+window.INCLUSIONS.pack(side=LEFT)
+
+MERGED_VALUE = IntVar()
+window.MERGED = Checkbutton(window.f03, text="Merged", variable=MERGED_VALUE)
+window.MERGED.pack(side=LEFT)
 # -------------END---File Operations---END-----------
 
 window.EMPTY0 = Label(wrapper0)
-window.EMPTY0.pack(pady=15)
+window.EMPTY0.pack(pady=21)
 
 # -----------------Data-----------------
 window.lf1 = LabelFrame(wrapper0, text="Data")
@@ -604,8 +739,8 @@ window.canvas.pack(side=LEFT)
 
 
 # -----------------Start-up-----------------
-window.lf2 = LabelFrame(wrapper1, text="Start-up")
-window.lf2.pack(ipady=2)
+window.lf2 = LabelFrame(wrapper1, text="Start-up", height=50)
+window.lf2.pack(ipady=2, expand=True, anchor=NE)
 
 window.f20 = Frame(window.lf2)
 window.f20.pack(pady=2, fill=X)
@@ -627,59 +762,105 @@ window.COLUMNS.pack(side=LEFT)
 
 window.f22 = Frame(window.lf2)
 window.f22.pack(pady=2, fill=X)
-GRAIN_VALUE = IntVar()
-GRAIN_VALUE.set(50)
-window.GRAIN = Entry(window.f22, textvariable=GRAIN_VALUE)
-window.GRAIN.pack(side=LEFT)
-ButtonCreator(window.f22, "Seed")
-
-
+ButtonCreator(window.f22, "Initialize")
 
 window.f23 = Frame(window.lf2)
-window.f23.pack(pady=2, fill=X)
+window.f23.pack(pady=8, fill=X)
 ButtonCreator(window.f23, "RST")
 # -----------END---Start-up---END-----------
 
-# -----------------Generation-----------------
-window.lf3 = LabelFrame(wrapper1, text="Generation", width=500, height=500)
-window.lf3.pack(side=RIGHT, ipady=2)
+
+# ----------------Inclusions-----------------
+window.lf3 = LabelFrame(wrapper1, text="Inclusions")
+window.lf3.pack(ipady=2, anchor=NE, fill=BOTH)
 
 window.f30 = Frame(window.lf3)
 window.f30.pack(pady=2, fill=X)
-KERNEL_CURR_VALUE = StringVar()
-KERNEL_CURR_VALUE.set(KERNELS[1])
-window.KERNEL_CURR = Label(window.f30, textvariable=KERNEL_CURR_VALUE)
-window.KERNEL_CURR.pack(side=LEFT)
-
-ButtonCreator(window.f30, "Once")
+MIN_INCLUSIONS_LBL = Label(window.f30, text="Minimum radius: ")
+MIN_INCLUSIONS_LBL.pack(side=LEFT)
+MIN_INCLUSIONS_VALUE = IntVar()
+MIN_INCLUSIONS_VALUE.set(1)
+window.MIN_INCLUSIONS = Entry(window.f30, textvariable=MIN_INCLUSIONS_VALUE, width=10, justify=RIGHT)
+window.MIN_INCLUSIONS.pack(side=RIGHT)
 
 window.f31 = Frame(window.lf3)
 window.f31.pack(pady=2, fill=X)
-
-ButtonCreator(window.f31, "Start/Pause")
-
-# EMPTY33
-window.f32 = Frame(window.lf3)
-window.f32.pack(pady=2, fill=X)
-window.EMPTY33 = Label(window.f32)
-window.EMPTY33.pack(side=LEFT)
-
+MAX_INCLUSIONS_LBL = Label(window.f31, text="Maximum radius: ")
+MAX_INCLUSIONS_LBL.pack(side=LEFT)
+MAX_INCLUSIONS_VALUE = IntVar()
+MAX_INCLUSIONS_VALUE.set(10)
+window.MAX_INCLUSIONS = Entry(window.f31, textvariable=MAX_INCLUSIONS_VALUE, width=10, justify=RIGHT)
+window.MAX_INCLUSIONS.pack(side=RIGHT)
 
 window.f32 = Frame(window.lf3)
 window.f32.pack(pady=2, fill=X)
-RANDOM_BOX_VALUE = IntVar()
-window.RANDOM_BOX = Checkbutton(window.f32, text="Random", variable=RANDOM_BOX_VALUE)
-window.RANDOM_BOX.pack(side=LEFT)
+QUANTITY_INCLUSIONS_LBL = Label(window.f32, text="Quantity:  ")
+QUANTITY_INCLUSIONS_LBL.pack(side=LEFT)
+QUANTITY_INCLUSIONS_VALUE = IntVar()
+QUANTITY_INCLUSIONS_VALUE.set(1)
+window.QUANTITY_INCLUSIONS = Entry(window.f32, textvariable=QUANTITY_INCLUSIONS_VALUE, width=10, justify=RIGHT)
+window.QUANTITY_INCLUSIONS.pack(side=RIGHT)
 
 window.f33 = Frame(window.lf3)
 window.f33.pack(pady=2, fill=X)
+ButtonCreator(window.f33, "Inclusions")
+# -----------END---Inclusions---END-----------
+
+
+# -----------------Seeding-----------------
+window.lf4 = LabelFrame(wrapper1, text="Seeding")
+window.lf4.pack(ipady=2, anchor=E, fill=BOTH)
+
+window.f40 = Frame(window.lf4)
+window.f40.pack(pady=2, fill=X)
+GRAIN_VALUE = IntVar()
+GRAIN_VALUE.set(50)
+window.GRAIN = Entry(window.f40, textvariable=GRAIN_VALUE, width=10)
+window.GRAIN.pack(side=LEFT)
+ButtonCreator(window.f40, "Seed")
+# -----------END---Seeding---END-----------
+
+
+# -----------------Generation-----------------
+window.lf5 = LabelFrame(wrapper1, text="Generation")
+window.lf5.pack(ipady=2, anchor=E, fill=BOTH)
+
+window.f50 = Frame(window.lf5)
+window.f50.pack(pady=2, fill=X)
+KERNEL_CURR_VALUE = StringVar()
+KERNEL_CURR_VALUE.set(KERNELS[1])
+window.KERNEL_CURR = Label(window.f50, textvariable=KERNEL_CURR_VALUE)
+window.KERNEL_CURR.pack(side=LEFT)
+
+ButtonCreator(window.f50, "Once")
+
+window.f51 = Frame(window.lf5)
+window.f51.pack(pady=2, fill=X)
+
+ButtonCreator(window.f51, "Start/Pause")
+
+# EMPTY33
+window.f52 = Frame(window.lf5)
+window.f52.pack(pady=2, fill=X)
+window.EMPTY53 = Label(window.f52)
+window.EMPTY53.pack(side=LEFT)
+
+
+window.f52 = Frame(window.lf5)
+window.f52.pack(pady=2, fill=X)
+RANDOM_BOX_VALUE = IntVar()
+window.RANDOM_BOX = Checkbutton(window.f52, text="Random", variable=RANDOM_BOX_VALUE)
+window.RANDOM_BOX.pack(side=LEFT)
+
+window.f53 = Frame(window.lf5)
+window.f53.pack(pady=2, fill=X)
 WRAP_VALUE = IntVar()
-window.WRAP = Checkbutton(window.f33, text="Wrap?", variable=WRAP_VALUE)
+window.WRAP = Checkbutton(window.f53, text="Wrap?", variable=WRAP_VALUE)
 window.WRAP.pack(side=LEFT)
 
-window.f34 = Frame(window.lf3)
-window.f34.pack(pady=2, fill=X)
-window.LIST = Listbox(window.f34, height=6, bd=1)
+window.f54 = Frame(window.lf5)
+window.f54.pack(pady=2, fill=X)
+window.LIST = Listbox(window.f54, height=6, bd=1)
 for k, v in KERNELS.items():
     window.LIST.insert(k, v)
 window.LIST.select_set(0)
@@ -690,6 +871,7 @@ window.LIST.pack(side=LEFT)
 
 
 f = Functionalities()
+merged_old = 0
 while 1:
     i = ImageTk.PhotoImage(Image.fromarray(f.FE.refresh()), master=window)
     window.canvas.create_image(0, 0, anchor=NW, image=i)
@@ -708,6 +890,22 @@ while 1:
         window.WRAP.config(state='normal')
         window.LIST.config(state='normal')
 
+
+    if MERGED_VALUE.get() == 0 and merged_old == 1:
+        GRAINS_VALUE.set(0)
+        INCLUSIONS_VALUE.set(0)
+        merged_old = 0
+    elif MERGED_VALUE.get() == 1 and merged_old == 0:
+        GRAINS_VALUE.set(1)
+        INCLUSIONS_VALUE.set(1)
+        merged_old = 1
+    else:
+        if GRAINS_VALUE.get() == 1 and INCLUSIONS_VALUE.get() == 1:
+            MERGED_VALUE.set(1)
+            merged_old = 1
+        else:
+            MERGED_VALUE.set(0)
+            merged_old = 0
     window.update_idletasks()
     window.update()
 
