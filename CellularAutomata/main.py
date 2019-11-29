@@ -513,7 +513,7 @@ class FrontEnd(CellularAutomata):
     def __init__(self):
         super().__init__()
         self.img = np.zeros([self.get().shape[0], self.get().shape[1], 3], dtype=np.uint8)
-        # cv2.imshow("Callular Automata Image", self.img)
+        cv2.imshow("Callular Automata Image", self.img)
         b, g, r = cv2.split(self.img)
         self.show = cv2.merge((r, g, b))
         self.show = Image.fromarray(self.show)
@@ -525,7 +525,8 @@ class FrontEnd(CellularAutomata):
         else:
             pass
         img = np.array([[colors[array[r][c] % 301] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
-        # cv2.imshow("Callular Automata Image", self.img)
+        print(self.img)
+        cv2.imshow("Callular Automata Image", self.img)
         b, g, r = cv2.split(img)
         img = cv2.merge((r, g, b))
         self.img = img
@@ -656,7 +657,7 @@ class Functionalities:
                     new = [r, c, data[r][c]]
                     array.append(new)
             np.savetxt(file_s, array, delimiter=';', fmt='%d')
-        cv2.imwrite(self.currentPath + r'\\Data\\PNGs\\' + str(self.fileName) + '.png', image)
+        cv2.imwrite(self.currentPath + r'\\Data\\PNGs' + str(self.fileName) + '.png', image)
 
     def openFile(self):
         path = filedialog.askopenfilename(filetypes=(("*.csv", "*.csv"), ("All files", "*.*")))
@@ -871,7 +872,6 @@ window.LIST.pack(side=LEFT)
 
 f = Functionalities()
 merged_old = 0
-MERGED_VALUE.set(1)
 while 1:
     i = ImageTk.PhotoImage(Image.fromarray(f.FE.refresh()), master=window)
     window.canvas.create_image(0, 0, anchor=NW, image=i)
