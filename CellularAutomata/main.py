@@ -951,7 +951,7 @@ GBC_THRESHOLD_VALUE.set(50)
 window.GBC_THRESHOLD = Entry(window.f53, textvariable=GBC_THRESHOLD_VALUE, width=3, justify=RIGHT)
 window.GBC_THRESHOLD.pack(side=RIGHT, padx=2)
 
-window.GBC_THRESHOLD_LBL = Label(window.f53, text="Threshold:")
+window.GBC_THRESHOLD_LBL = Label(window.f53, text="|   Probability of change [%]:")
 window.GBC_THRESHOLD_LBL.pack(side=RIGHT)
 
 
@@ -1001,6 +1001,8 @@ while 1:
     else:
         window.GBC.config(state='normal')
         if GBC_VALUE.get() == 1:
+            window.LIST.select_clear(first=0, last=6)
+            KERNEL_CURR_VALUE.set(KERNELS[0])
             window.GBC_THRESHOLD.config(state='normal')
             window.RANDOM_BOX.config(state='disabled')
             window.WRAP.config(state='disabled')
