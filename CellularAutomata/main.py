@@ -8,6 +8,7 @@ from tkinter import filedialog
 import cv2
 from scipy import ndimage
 from PIL import Image, ImageTk
+import collections
 
 window = Tk()
 window.title('Cellular Automata Controls')
@@ -324,25 +325,32 @@ KERNELS = {0: "MOORE",
            5: "HEXA_RIGHT"
            }
 # ************************************************************************
+
+
 class CellularAutomata:
     ROWS_NO = 500
     COLUMNS_NO = 500
-    KERNEL_MOORE = np.ones([3, 3], dtype=np.uint8)
-    KERNEL_CROSS = np.array([[0, 1, 0],
-                             [1, 1, 1],
-                             [0, 1, 0]])
-    KERNEL_PENTA_LEFT = np.array([[0, 1, 1],
-                                  [0, 1, 1],
-                                  [0, 1, 1]])
-    KERNEL_PENTA_RIGHT = np.array([[1, 1, 0],
-                                   [1, 1, 0],
-                                   [1, 1, 0]])
-    KERNEL_HEXA_LEFT = np.array([[0, 1, 1],
-                                 [1, 1, 1],
-                                 [1, 1, 0]])
-    KERNEL_HEXA_RIGHT = np.array([[1, 1, 0],
-                                  [1, 1, 1],
-                                  [0, 1, 1]])
+    KERNEL_MOORE = [(-1, -1), (-1, 0), (-1, 1),
+                    (0, -1), (0, 1),
+                    (1, -1), (1, 0), (1, 1)]
+    KERNEL_CROSS = [(-1, 0),
+                    (0, -1), (0, 1),
+                    (1, 0)]
+    KERNEL_PENTA_LEFT = [(-1, -1), (-1, 0),
+                         (0, -1),
+                         (1, -1), (1, 0)]
+    KERNEL_PENTA_RIGHT = [(-1, 0), (-1, 1),
+                          (0, 1),
+                          (1, 0), (1, 1)]
+    KERNEL_HEXA_LEFT = [(-1, -1), (-1, 0),
+                        (0, -1), (0, 1),
+                        (1, 0), (1, 1)]
+    KERNEL_HEXA_RIGHT = [(-1, 0), (-1, 1),
+                         (0, -1), (0, 1),
+                         (1, -1), (1, 0)]
+    KERNEL_NEAREST_MOORE = KERNEL_CROSS
+    KERNEL_FURTHER_MOORE = [(-1, -1), (-1, 1),
+                            (1, -1), (1, 1)]
     KERNEL = [KERNEL_MOORE, KERNEL_CROSS, KERNEL_PENTA_LEFT, KERNEL_PENTA_RIGHT, KERNEL_HEXA_LEFT, KERNEL_HEXA_RIGHT]
     TYPES = ["constant", "wrap"]
 
@@ -355,10 +363,13 @@ class CellularAutomata:
         self.is_procedure = False
         self.grain_quantity = 50
         self.is_random = 0
+        self.GBC = 0
+        self.GBC_threshold = 0
         self.no_changes_counter = 0
         self.inclusions_q = 1
         self.inclusions_r_min = 1
         self.inclusions_r_max = 10
+
 
     def set(self, newData):
         self.data = newData
@@ -475,16 +486,94 @@ class CellularAutomata:
     def dilatate_is_procedure(self):
         self.is_procedure = not self.is_procedure
 
+    def dilatate_ALL(self):
+         while self.is_procedure == 1:
+             self.dilatate()
+
+    def dilatate_base_type(self, r, c):
+        array = self.get()
+        if array[r][c] != 0 or array[r][c] == 1:
+            new_value = [(array[r][c], 0)]
+            quantity = 0
+        else:
+            neighbours = []
+            quantity = 0
+            for item in self.kernel:
+                r_n = r + item[0]
+                c_n = c + item[1]
+                if (0 <= r_n <= array.shape[0] - 1) and (0 <= c_n <= array.shape[1] - 1):
+                    neighbour = array[r_n, c_n]
+                else:
+                    if self.type == 0:
+                        neighbour = 0
+                    elif self.type == 1:
+                        r_n = self.wrapping(r_n, array.shape[0])
+                        c_n = self.wrapping(c_n, array.shape[1])
+                        neighbour = array[r_n, c_n]
+                    else:
+                        raise ValueError("Wrong type given")
+                if neighbour == 0 or neighbour == 1:
+                    pass
+                else:
+                    neighbours.append(neighbour)
+
+            if not neighbours:
+                new_value = [(0, 0)]
+            else:
+                new_value = collections.Counter(neighbours).most_common(8)
+
+        return new_value
+
+    def dilatate_base(self):
+        array = self.get()
+        array_new = np.zeros([array.shape[0], array.shape[1]], dtype=np.uint8)
+        for r in range(array.shape[0]):
+            for c in range(array.shape[1]):
+                new_value, quantity = self.dilatate_base_type(r, c)[0]
+                if self.GBC == 1:
+                    if quantity == 0:
+                        array_new[r][c] = new_value
+                    else:
+                        if quantity >= 5:
+                            array_new[r][c] = new_value
+                        else:
+                            self.kernel = self.KERNEL_NEAREST_MOORE
+                            new_value, quantity = self.dilatate_base_type(r, c)[0]
+                            if quantity >= 3:
+                                array_new[r][c] = new_value
+                            else:
+                                self.kernel = self.KERNEL_FURTHER_MOORE
+                                new_value, quantity = self.dilatate_base_type(r, c)[0]
+                                if quantity >= 3:
+                                    array_new[r][c] = new_value
+                                else:
+                                    self.kernel = self.KERNEL_MOORE
+                                    new_value, quantity = self.dilatate_base_type(r, c)[0]
+                                    if randint(0, 100) >= self.GBC_threshold:
+                                        array_new[r][c] = new_value
+                                    else:
+                                        array_new[r][c] = 0
+                    self.kernel = self.KERNEL_MOORE
+                else:
+                    array_new[r][c] = new_value
+
+            # window.update_id
+        return array_new
+
     def dilatate(self):
         array = self.get()
 
         arr_inclusions = np.array([[array[x][y] if (array[x][y] == 1) else 0 for y in range(array.shape[1])]
                               for x in range(array.shape[0])])
         array_only_grains = array - arr_inclusions
-        dilation = ndimage.grey_dilation(array_only_grains, footprint=self.kernel, mode='constant') if self.type == 0 \
-            else ndimage.grey_dilation(array_only_grains, footprint=self.kernel, mode='wrap')
+
+        # dilation = ndimage.grey_dilation(array_only_grains, footprint=self.kernel, mode='constant') if self.type == 0 \
+        #     else ndimage.grey_dilation(array_only_grains, footprint=self.kernel, mode='wrap')
+
+        dilatated = self.dilatate_base()
+
         self.update_kernel()
-        array_new = np.array([[array[x][y] if (array[x][y] != 0 or array[x][y] == 1) else dilation[x][y] for y in range(array.shape[1])]
+        array_new = np.array([[array[x][y] if (array[x][y] != 0 or array[x][y] == 1) else dilatated[x][y] for y in range(array.shape[1])]
                               for x in range(array.shape[0])])
         array_new = np.array([[array_new[x][y] if array[x][y] != 1 else arr_inclusions[x][y] for y in range(array.shape[1])]
                               for x in range(array.shape[0])])
@@ -504,9 +593,14 @@ class CellularAutomata:
                 self.is_procedure = self.is_procedure
         self.set(array_new)
 
-    def dilatate_ALL(self):
-         while self.is_procedure == 1:
-             self.dilatate()
+    def wrapping(self, number, r):
+        if number >= r:
+            new_no = 0
+        elif number < 0:
+            new_no = r - 1
+        else:
+            new_no = number
+        return new_no
 
 
 class FrontEnd(CellularAutomata):
@@ -600,6 +694,8 @@ class Functionalities:
         self.FE.kernel = self.FE.KERNEL[list(KERNELS.values()).index(KERNEL_CURR_VALUE.get())]
         self.FE.is_random = RANDOM_BOX_VALUE.get()
         self.FE.type = WRAP_VALUE.get()
+        self.FE.GBC = GBC_VALUE.get()
+        self.FE.GBC_threshold = GBC_THRESHOLD_VALUE.get()
 
     def saveFile(self, data):
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
@@ -844,22 +940,36 @@ window.f52.pack(pady=2, fill=X)
 window.EMPTY53 = Label(window.f52)
 window.EMPTY53.pack(side=LEFT)
 
-
-window.f52 = Frame(window.lf5)
-window.f52.pack(pady=2, fill=X)
-RANDOM_BOX_VALUE = IntVar()
-window.RANDOM_BOX = Checkbutton(window.f52, text="Random", variable=RANDOM_BOX_VALUE)
-window.RANDOM_BOX.pack(side=LEFT)
-
 window.f53 = Frame(window.lf5)
 window.f53.pack(pady=2, fill=X)
-WRAP_VALUE = IntVar()
-window.WRAP = Checkbutton(window.f53, text="Wrap?", variable=WRAP_VALUE)
-window.WRAP.pack(side=LEFT)
+GBC_VALUE = IntVar()
+window.GBC = Checkbutton(window.f53, text="GBC", variable=GBC_VALUE)
+window.GBC.pack(side=LEFT)
+
+GBC_THRESHOLD_VALUE = IntVar()
+GBC_THRESHOLD_VALUE.set(50)
+window.GBC_THRESHOLD = Entry(window.f53, textvariable=GBC_THRESHOLD_VALUE, width=3, justify=RIGHT)
+window.GBC_THRESHOLD.pack(side=RIGHT, padx=2)
+
+window.GBC_THRESHOLD_LBL = Label(window.f53, text="Threshold:")
+window.GBC_THRESHOLD_LBL.pack(side=RIGHT)
+
 
 window.f54 = Frame(window.lf5)
 window.f54.pack(pady=2, fill=X)
-window.LIST = Listbox(window.f54, height=6, bd=1)
+WRAP_VALUE = IntVar()
+window.WRAP = Checkbutton(window.f54, text="Wrap?", variable=WRAP_VALUE)
+window.WRAP.pack(side=LEFT)
+
+window.f55 = Frame(window.lf5)
+window.f55.pack(pady=2, fill=X)
+RANDOM_BOX_VALUE = IntVar()
+window.RANDOM_BOX = Checkbutton(window.f55, text="Random", variable=RANDOM_BOX_VALUE)
+window.RANDOM_BOX.pack(side=LEFT)
+
+window.f56 = Frame(window.lf5)
+window.f56.pack(pady=2, fill=X)
+window.LIST = Listbox(window.f56, height=6, bd=1)
 for k, v in KERNELS.items():
     window.LIST.insert(k, v)
 window.LIST.select_set(0)
@@ -872,24 +982,34 @@ window.LIST.pack(side=LEFT)
 f = Functionalities()
 merged_old = 0
 MERGED_VALUE.set(1)
+
+
 while 1:
     i = ImageTk.PhotoImage(Image.fromarray(f.FE.refresh()), master=window)
     window.canvas.create_image(0, 0, anchor=NW, image=i)
+
     try:
         KERNEL_CURR_VALUE.set(KERNELS[window.LIST.curselection()[0]])
     except:
         pass
 
-    # print(list(KERNELS.values()).index(KERNEL_CURR_VALUE.get()))
     if f.FE.is_procedure == 1:
+        window.GBC.config(state='disabled')
         window.RANDOM_BOX.config(state='disabled')
         window.WRAP.config(state='disabled')
         window.LIST.config(state='disabled')
     else:
-        window.RANDOM_BOX.config(state='normal')
-        window.WRAP.config(state='normal')
-        window.LIST.config(state='normal')
-
+        window.GBC.config(state='normal')
+        if GBC_VALUE.get() == 1:
+            window.GBC_THRESHOLD.config(state='normal')
+            window.RANDOM_BOX.config(state='disabled')
+            window.WRAP.config(state='disabled')
+            window.LIST.config(state='disabled')
+        else:
+            window.GBC_THRESHOLD.config(state='disabled')
+            window.RANDOM_BOX.config(state='normal')
+            window.WRAP.config(state='normal')
+            window.LIST.config(state='normal')
 
     if MERGED_VALUE.get() == 0 and merged_old == 1:
         GRAINS_VALUE.set(0)
@@ -906,8 +1026,11 @@ while 1:
         else:
             MERGED_VALUE.set(0)
             merged_old = 0
+    # print(list(KERNELS.values()).index(KERNEL_CURR_VALUE.get()))
     window.update_idletasks()
     window.update()
+
+
 
 
 
