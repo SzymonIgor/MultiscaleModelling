@@ -16,7 +16,7 @@ window.title('Cellular Automata Controls')
 colors = {0: [255, 255, 255],  # white
           1: [0, 0, 0],
           2: [54, 58, 99],
-          3: [220, 110, 61],
+          3: [0, 0, 255],
           4: [109, 29, 196],
           5: [148, 30, 189],
           6: [211, 53, 255],
@@ -369,6 +369,8 @@ class CellularAutomata:
         self.inclusions_q = 1
         self.inclusions_r_min = 1
         self.inclusions_r_max = 10
+        self.frozen = []
+        self.firstPhase = np.zeros([self.rows, self.columns], dtype=np.uint8)
 
 
     def set(self, newData):
@@ -420,6 +422,9 @@ class CellularAutomata:
         a = np.array([[a[r][c] if a[r][c] != 1 else 0 for c in range(self.columns)] for r in range(self.rows)])
         return a
 
+    def only_first_phase(self):
+        return np.array(self.firstPhase)
+
     def create_circular_mask(self, h, w, center=None, radius=None):
 
         if center is None:  # use the middle of the image
@@ -466,8 +471,7 @@ class CellularAutomata:
 
     def generate_seed(self, grains):
         self.grain_quantity = int(grains)
-        array = self.only_inclusions()
-        self.set(array)
+        array = self.get()
         # print(f'\n\n Seed generation')
         for grainID in range(self.grain_quantity):
             watch_dog = 1000
@@ -479,7 +483,7 @@ class CellularAutomata:
                     if watch_dog == 0:
                         raise Exception("Cannot find enough free space to insert every seed")
                 else:
-                    array[r][c] = grainID + 2
+                    array[r][c] = grainID + (max(self.frozen)+2 if self.frozen != [] else 3)
                     break
         self.set(array)
 
@@ -490,8 +494,6 @@ class CellularAutomata:
          while self.is_procedure == 1:
              self.dilatate()
 
-<<<<<<< HEAD
-=======
     def dilatate_base_type(self, r, c):
         array = self.get()
         if array[r][c] != 0 or array[r][c] == 1:
@@ -514,7 +516,7 @@ class CellularAutomata:
                         neighbour = array[r_n, c_n]
                     else:
                         raise ValueError("Wrong type given")
-                if neighbour == 0 or neighbour == 1:
+                if any([neighbour == 0, neighbour == 1,  (any(neighbour == x for x in self.frozen))]):
                     pass
                 else:
                     neighbours.append(neighbour)
@@ -551,7 +553,7 @@ class CellularAutomata:
                                 else:
                                     self.kernel = self.KERNEL_MOORE
                                     new_value, quantity = self.dilatate_base_type(r, c)[0]
-                                    if randint(0, 100) >= self.GBC_threshold:
+                                    if randint(0, 100) < self.GBC_threshold:
                                         array_new[r][c] = new_value
                                     else:
                                         array_new[r][c] = 0
@@ -562,7 +564,6 @@ class CellularAutomata:
             # window.update_id
         return array_new
 
->>>>>>> db380937f8044873483d050f69a8c9ac2c7539a6
     def dilatate(self):
         array = self.get()
 
@@ -596,81 +597,6 @@ class CellularAutomata:
                 self.is_procedure = self.is_procedure
         self.set(array_new)
 
-<<<<<<< HEAD
-    def dilatate_base_type(self, r, c):
-        array = self.get()
-        if array[r][c] != 0 or array[r][c] == 1:
-            new_value = [(array[r][c], 0)]
-            quantity = 0
-        else:
-            neighbours = []
-            quantity = 0
-            for item in self.kernel:
-                r_n = r + item[0]
-                c_n = c + item[1]
-                if (0 <= r_n <= array.shape[0] - 1) and (0 <= c_n <= array.shape[1] - 1):
-                    neighbour = array[r_n, c_n]
-                else:
-                    if self.type == 0:
-                        neighbour = 0
-                    elif self.type == 1:
-                        r_n = self.wrapping(r_n, array.shape[0])
-                        c_n = self.wrapping(c_n, array.shape[1])
-                        neighbour = array[r_n, c_n]
-                    else:
-                        raise ValueError("Wrong type given")
-                if neighbour == 0 or neighbour == 1:
-                    pass
-                else:
-                    neighbours.append(neighbour)
-
-            if not neighbours:
-                new_value = [(0, 0)]
-            else:
-                new_value = collections.Counter(neighbours).most_common(8)
-
-        return new_value
-
-    def dilatate_base(self):
-        array = self.get()
-        array_new = np.zeros([array.shape[0], array.shape[1]], dtype=np.uint8)
-        for r in range(array.shape[0]):
-            for c in range(array.shape[1]):
-                new_value, quantity = self.dilatate_base_type(r, c)[0]
-                if self.GBC == 1:
-                    if quantity == 0:
-                        array_new[r][c] = new_value
-                    else:
-                        if quantity >= 5:
-                            array_new[r][c] = new_value
-                        else:
-                            self.kernel = self.KERNEL_NEAREST_MOORE
-                            new_value, quantity = self.dilatate_base_type(r, c)[0]
-                            if quantity >= 3:
-                                array_new[r][c] = new_value
-                            else:
-                                self.kernel = self.KERNEL_FURTHER_MOORE
-                                new_value, quantity = self.dilatate_base_type(r, c)[0]
-                                if quantity >= 3:
-                                    array_new[r][c] = new_value
-                                else:
-                                    self.kernel = self.KERNEL_MOORE
-                                    new_value, quantity = self.dilatate_base_type(r, c)[0]
-                                    if randint(0, 100) >= self.GBC_threshold:
-                                        array_new[r][c] = new_value
-                                    else:
-                                        array_new[r][c] = 0
-                    self.kernel = self.KERNEL_MOORE
-                else:
-                    array_new[r][c] = new_value
-
-
-            window.update_idletasks()
-            window.update()
-        return array_new
-
-=======
->>>>>>> db380937f8044873483d050f69a8c9ac2c7539a6
     def wrapping(self, number, r):
         if number >= r:
             new_no = 0
@@ -679,6 +605,23 @@ class CellularAutomata:
         else:
             new_no = number
         return new_no
+
+    def delete_grainID(self, grainID):
+        array = self.get()
+        # or any(array[r][c] == x for x in self.frozen)
+        array = np.array([[(0 if array[r][c] == grainID and all(array[r][c] != x for x in self.frozen) and array[r][c] != 1 else array[r][c]) for c in range(array.shape[1])] for r in range(array.shape[0])])
+        self.set(array)
+
+    def substructures_feature(self):
+        array = self.get()
+        [[self.frozen.append(array[r][c]) if (array[r][c] != 0 and array[r][c] != 1) else None for c in range(array.shape[1])] for r in range(array.shape[0])]
+        self.frozen = list(set(self.frozen))
+
+    def dual_phase_feature(self):
+        self.frozen = [3]
+        array = self.get()
+        self.firstPhase = [[3 if array[r][c] != 0 and array[r][c] != 1 else 0 for c in range(array.shape[1])] for r in range(array.shape[0])]
+        self.set(np.bitwise_or(self.only_inclusions(), self.firstPhase))
 
 
 class FrontEnd(CellularAutomata):
@@ -690,6 +633,12 @@ class FrontEnd(CellularAutomata):
         self.show = cv2.merge((r, g, b))
         self.show = Image.fromarray(self.show)
         self.refresh()
+
+    def callback(self, event):
+        if DELETE_BY_CLICK_VALUE.get() == 1:
+            array = self.get()
+            print(f'clicked at: {event.x},{event.y}\nGrainID: {array[event.y][event.x]}')
+            self.delete_grainID(array[event.y][event.x])
 
     def map_to_image(self, array=None):
         if array is None:
@@ -725,10 +674,10 @@ class Functionalities:
     def command_line_executioner(self):
         if self.operation == "Save":
             print('Saving')
-            self.saveFile(self.FE.get())
+            self.saveFile()
         elif self.operation == "Export":
             print('Exporting')
-            self.exportFile(self.FE.get())
+            self.exportFile()
         elif self.operation == "Open":
             print('Opening')
             self.FE.set(self.openFile())
@@ -765,6 +714,10 @@ class Functionalities:
         elif self.operation == "RST":
             print("Resetting data")
             self.FE.reset()
+        elif self.operation == "Dual-phase":
+            self.FE.dual_phase_feature()
+        elif self.operation == "Substructs":
+            self.FE.substructures_feature()
         else:
             raise NameError
 
@@ -775,62 +728,78 @@ class Functionalities:
         self.FE.GBC = GBC_VALUE.get()
         self.FE.GBC_threshold = GBC_THRESHOLD_VALUE.get()
 
-    def saveFile(self, data):
+    def saveFile(self):
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        add_name = []
+        data = []
         if MERGED_VALUE.get() == 1:
-            add_name = "merged"
-            data = data
-        elif GRAINS_VALUE.get() == 1:
-            add_name = "grains"
-            data = self.FE.only_grains()
-        elif INCLUSIONS_VALUE.get() == 1:
-            add_name = "inclusions"
-            data = self.FE.only_inclusions()
-        else:
+            add_name.append("merged")
+            data.append(self.FE.get())
+        if GRAINS_VALUE.get() == 1:
+            add_name.append("grains")
+            data.append(self.FE.only_grains())
+        if INCLUSIONS_VALUE.get() == 1:
+            add_name.append("inclusions")
+            data.append(self.FE.only_inclusions())
+        if FIRSTPHASE_VALUE.get() == 1:
+            add_name.append("firstPhase")
+            data.append(self.FE.only_first_phase())
+
+        if not data:
             MERGED_VALUE.set(1)
-            add_name = "merged"
-            data = data
+            add_name.append("merged")
+            data.append(data)
 
-        if window.PATH_SAVE.get() == '':
-            self.fileName = f'CA_{add_name}_{self.timeNow}'
-        else:
-            self.fileName = window.PATH_SAVE.get()
-        with open(str(self.currentPath + r'\\Data\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
-            np.savetxt(file_s, data, delimiter=',', fmt='%d')
+        for a, d in zip(add_name, data):
+            if window.PATH_SAVE.get() == '':
+                self.fileName = f'CA_{a}_{self.timeNow}'
+            else:
+                self.fileName = f'{a}_{window.PATH_SAVE.get()}'
+            with open(str(self.currentPath + r'\\Data\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
+                np.savetxt(file_s, d, delimiter=',', fmt='%d')
 
-    def exportFile(self, data):
+    def exportFile(self):
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        add_name = []
+        data = []
+        image = []
         if MERGED_VALUE.get() == 1:
-            add_name = "merged"
-            data = data
-            image = self.FE.map_to_image()
-        elif GRAINS_VALUE.get() == 1:
-            add_name = "grains"
-            data = self.FE.only_grains()
-            image = self.FE.map_to_image(data)
-        elif INCLUSIONS_VALUE.get() == 1:
-            add_name = "inclusions"
-            data = self.FE.only_inclusions()
-            image = self.FE.map_to_image(data)
-        else:
+            add_name.append("merged")
+            data.append(self.FE.get())
+            image.append(self.FE.map_to_image())
+        if GRAINS_VALUE.get() == 1:
+            add_name.append("grains")
+            data.append(self.FE.only_grains())
+            image.append(self.FE.map_to_image(self.FE.only_grains()))
+        if INCLUSIONS_VALUE.get() == 1:
+            add_name.append("inclusions")
+            data.append(self.FE.only_inclusions())
+            image.append(self.FE.map_to_image(self.FE.only_inclusions()))
+        if FIRSTPHASE_VALUE.get() == 1:
+            add_name.append("firstPhase")
+            data.append(self.FE.only_first_phase())
+            image.append(self.FE.map_to_image(self.FE.only_first_phase()))
+
+        if not data:
             MERGED_VALUE.set(1)
-            add_name = "merged"
-            data = data
-            image = self.FE.map_to_image()
+            add_name.append("merged")
+            data.append(data)
+            image.append(self.FE.map_to_image())
 
-        if window.PATH_EXPORT.get() == '':
-            self.fileName = f'Export_{add_name}_{self.timeNow}'
-        else:
-            self.fileName = window.PATH_EXPORT.get()
+        for a, d, img in zip(add_name, data, image):
+            if window.PATH_EXPORT.get() == '':
+                self.fileName = f'Export_{a}_{self.timeNow}'
+            else:
+                self.fileName = f'{a}_{window.PATH_SAVE.get()}'
 
-        array = []
-        with open(str(self.currentPath + r'\\Data\\CSVs\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
-            for r in range(data.shape[0]):
-                for c in range(data.shape[1]):
-                    new = [r, c, data[r][c]]
-                    array.append(new)
-            np.savetxt(file_s, array, delimiter=';', fmt='%d')
-        cv2.imwrite(self.currentPath + r'\\Data\\PNGs\\' + str(self.fileName) + '.png', image)
+            array = []
+            with open(str(self.currentPath + r'\\Data\\CSVs\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
+                for r in range(d.shape[0]):
+                    for c in range(d.shape[1]):
+                        new = [r, c, d[r][c]]
+                        array.append(new)
+                np.savetxt(file_s, array, delimiter=';', fmt='%d')
+            cv2.imwrite(self.currentPath + r'\\Data\\PNGs\\' + str(self.fileName) + '.png', img)
 
     def openFile(self):
         path = filedialog.askopenfilename(filetypes=(("*.csv", "*.csv"), ("All files", "*.*")))
@@ -889,6 +858,10 @@ INCLUSIONS_VALUE = IntVar()
 window.INCLUSIONS = Checkbutton(window.f03, text="Inclusions", variable=INCLUSIONS_VALUE)
 window.INCLUSIONS.pack(side=LEFT)
 
+FIRSTPHASE_VALUE = IntVar()
+window.FIRSTPHASE = Checkbutton(window.f03, text="firstPhase", variable=FIRSTPHASE_VALUE)
+window.FIRSTPHASE.pack(side=LEFT)
+
 MERGED_VALUE = IntVar()
 window.MERGED = Checkbutton(window.f03, text="Merged", variable=MERGED_VALUE)
 window.MERGED.pack(side=LEFT)
@@ -900,6 +873,8 @@ window.EMPTY0.pack(pady=21)
 # -----------------Data-----------------
 window.lf1 = LabelFrame(wrapper0, text="Data")
 window.lf1.pack(ipady=5)
+
+
 
 window.f10 = Frame(window.lf1)
 window.f10.pack(pady=5, fill=X)
@@ -952,7 +927,7 @@ window.f30.pack(pady=2, fill=X)
 MIN_INCLUSIONS_LBL = Label(window.f30, text="Minimum radius: ")
 MIN_INCLUSIONS_LBL.pack(side=LEFT)
 MIN_INCLUSIONS_VALUE = IntVar()
-MIN_INCLUSIONS_VALUE.set(1)
+MIN_INCLUSIONS_VALUE.set(4)
 window.MIN_INCLUSIONS = Entry(window.f30, textvariable=MIN_INCLUSIONS_VALUE, width=10, justify=RIGHT)
 window.MIN_INCLUSIONS.pack(side=RIGHT)
 
@@ -961,7 +936,7 @@ window.f31.pack(pady=2, fill=X)
 MAX_INCLUSIONS_LBL = Label(window.f31, text="Maximum radius: ")
 MAX_INCLUSIONS_LBL.pack(side=LEFT)
 MAX_INCLUSIONS_VALUE = IntVar()
-MAX_INCLUSIONS_VALUE.set(10)
+MAX_INCLUSIONS_VALUE.set(9)
 window.MAX_INCLUSIONS = Entry(window.f31, textvariable=MAX_INCLUSIONS_VALUE, width=10, justify=RIGHT)
 window.MAX_INCLUSIONS.pack(side=RIGHT)
 
@@ -970,7 +945,7 @@ window.f32.pack(pady=2, fill=X)
 QUANTITY_INCLUSIONS_LBL = Label(window.f32, text="Quantity:  ")
 QUANTITY_INCLUSIONS_LBL.pack(side=LEFT)
 QUANTITY_INCLUSIONS_VALUE = IntVar()
-QUANTITY_INCLUSIONS_VALUE.set(1)
+QUANTITY_INCLUSIONS_VALUE.set(4)
 window.QUANTITY_INCLUSIONS = Entry(window.f32, textvariable=QUANTITY_INCLUSIONS_VALUE, width=10, justify=RIGHT)
 window.QUANTITY_INCLUSIONS.pack(side=RIGHT)
 
@@ -1029,11 +1004,7 @@ GBC_THRESHOLD_VALUE.set(50)
 window.GBC_THRESHOLD = Entry(window.f53, textvariable=GBC_THRESHOLD_VALUE, width=3, justify=RIGHT)
 window.GBC_THRESHOLD.pack(side=RIGHT, padx=2)
 
-<<<<<<< HEAD
-window.GBC_THRESHOLD_LBL = Label(window.f53, text="Threshold:")
-=======
 window.GBC_THRESHOLD_LBL = Label(window.f53, text="|   Probability of change [%]:")
->>>>>>> db380937f8044873483d050f69a8c9ac2c7539a6
 window.GBC_THRESHOLD_LBL.pack(side=RIGHT)
 
 
@@ -1056,15 +1027,32 @@ for k, v in KERNELS.items():
     window.LIST.insert(k, v)
 window.LIST.select_set(0)
 window.LIST.pack(side=LEFT)
-
-
 # -----------END---Generation---END--------------
+
+# -----------------Second Phase--------------------
+window.lf6 = LabelFrame(wrapper1, text="Second Phase")
+window.lf6.pack(ipady=2, anchor=E, fill=BOTH)
+
+window.f60 = Frame(window.lf6)
+window.f60.pack(pady=2, fill=X)
+DELETE_BY_CLICK_VALUE = IntVar()
+window.DELETE_BY_CLICK = Checkbutton(window.f60, text="Delete?", variable=DELETE_BY_CLICK_VALUE)
+window.DELETE_BY_CLICK.pack(side=LEFT)
+
+
+ButtonCreator(window.f60, "Dual-phase")
+ButtonCreator(window.f60, "Substructs")
+
+# -----------END---Second Phase---END--------------
+
+
 
 
 f = Functionalities()
 merged_old = 0
 MERGED_VALUE.set(1)
 
+window.canvas.bind("<Button-1>", f.FE.callback)
 
 while 1:
     i = ImageTk.PhotoImage(Image.fromarray(f.FE.refresh()), master=window)
@@ -1083,11 +1071,8 @@ while 1:
     else:
         window.GBC.config(state='normal')
         if GBC_VALUE.get() == 1:
-<<<<<<< HEAD
-=======
             window.LIST.select_clear(first=0, last=6)
             KERNEL_CURR_VALUE.set(KERNELS[0])
->>>>>>> db380937f8044873483d050f69a8c9ac2c7539a6
             window.GBC_THRESHOLD.config(state='normal')
             window.RANDOM_BOX.config(state='disabled')
             window.WRAP.config(state='disabled')
@@ -1101,13 +1086,15 @@ while 1:
     if MERGED_VALUE.get() == 0 and merged_old == 1:
         GRAINS_VALUE.set(0)
         INCLUSIONS_VALUE.set(0)
+        FIRSTPHASE_VALUE.set(0)
         merged_old = 0
     elif MERGED_VALUE.get() == 1 and merged_old == 0:
         GRAINS_VALUE.set(1)
         INCLUSIONS_VALUE.set(1)
+        FIRSTPHASE_VALUE.set(1)
         merged_old = 1
     else:
-        if GRAINS_VALUE.get() == 1 and INCLUSIONS_VALUE.get() == 1:
+        if GRAINS_VALUE.get() == 1 and INCLUSIONS_VALUE.get() == 1 and FIRSTPHASE_VALUE.get() == 1:
             MERGED_VALUE.set(1)
             merged_old = 1
         else:
