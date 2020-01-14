@@ -9,13 +9,15 @@ import cv2
 from scipy import ndimage
 from PIL import Image, ImageTk
 import collections
+from threading import Thread
+import time
 
 window = Tk()
 window.title('Cellular Automata Controls')
 # ************************************************************************
 colors = {0: [255, 255, 255],  # white
-          1: [0, 0, 0],
-          2: [54, 58, 99],
+          1: [0, 0, 0],  # inclusion
+          2: [0, 0, 0],  # boundary
           3: [0, 0, 255],
           4: [109, 29, 196],
           5: [148, 30, 189],
@@ -371,6 +373,7 @@ class CellularAutomata:
         self.inclusions_r_max = 10
         self.frozen = []
         self.firstPhase = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
 
 
     def set(self, newData):
@@ -390,6 +393,8 @@ class CellularAutomata:
     def init(self):
         self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
         self.is_procedure = False
+        self.firstPhase = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
 
     def update_kernel(self):
         if self.is_random == 1:
@@ -419,11 +424,18 @@ class CellularAutomata:
 
     def only_grains(self):
         a = self.data
-        a = np.array([[a[r][c] if a[r][c] != 1 else 0 for c in range(self.columns)] for r in range(self.rows)])
+        a = np.array([[a[r][c] if a[r][c] >= 3 else 0 for c in range(self.columns)] for r in range(self.rows)])
         return a
 
     def only_first_phase(self):
-        return np.array(self.firstPhase)
+        a = self.data
+        a = np.array([[a[r][c] if self.firstPhase[r][c] != 0 else 0 for c in range(self.columns)] for r in range(self.rows)])
+        return a
+
+    def only_boundaries(self):
+        a = self.data
+        a = np.array([[a[r][c] if self.boundry[r][c] else 0 for c in range(self.columns)] for r in range(self.rows)])
+        return a
 
     def create_circular_mask(self, h, w, center=None, radius=None):
 
@@ -470,10 +482,13 @@ class CellularAutomata:
                     pass
 
     def generate_seed(self, grains):
+        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
+
         self.grain_quantity = int(grains)
         array = self.get()
         # print(f'\n\n Seed generation')
         for grainID in range(self.grain_quantity):
+            grainID = np.amax(self.data) + 1
             watch_dog = 1000
             while watch_dog:
                 watch_dog -= 1
@@ -483,7 +498,7 @@ class CellularAutomata:
                     if watch_dog == 0:
                         raise Exception("Cannot find enough free space to insert every seed")
                 else:
-                    array[r][c] = grainID + (max(self.frozen)+2 if self.frozen != [] else 3)
+                    array[r][c] = (grainID if np.amax(self.data) != 0 and np.amax(self.data) != 1 else 3)
                     break
         self.set(array)
 
@@ -496,6 +511,7 @@ class CellularAutomata:
 
     def dilatate_base_type(self, r, c):
         array = self.get()
+        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
         if array[r][c] != 0 or array[r][c] == 1:
             new_value = [(array[r][c], 0)]
             quantity = 0
@@ -608,20 +624,47 @@ class CellularAutomata:
 
     def delete_grainID(self, grainID):
         array = self.get()
-        # or any(array[r][c] == x for x in self.frozen)
         array = np.array([[(0 if array[r][c] == grainID and all(array[r][c] != x for x in self.frozen) and array[r][c] != 1 else array[r][c]) for c in range(array.shape[1])] for r in range(array.shape[0])])
         self.set(array)
 
     def substructures_feature(self):
         array = self.get()
-        [[self.frozen.append(array[r][c]) if (array[r][c] != 0 and array[r][c] != 1) else None for c in range(array.shape[1])] for r in range(array.shape[0])]
+        [[self.frozen.append(array[r][c]) if (array[r][c] != 0 and array[r][c] != 1) else None for c in
+        range(array.shape[1])] for r in range(array.shape[0])]
         self.frozen = list(set(self.frozen))
 
     def dual_phase_feature(self):
-        self.frozen = [3]
         array = self.get()
-        self.firstPhase = [[3 if array[r][c] != 0 and array[r][c] != 1 else 0 for c in range(array.shape[1])] for r in range(array.shape[0])]
-        self.set(np.bitwise_or(self.only_inclusions(), self.firstPhase))
+        [[self.frozen.append(array[r][c]) if (array[r][c] != 0 and array[r][c] != 1) else None for c in range(array.shape[1])] for r in range(array.shape[0])]
+        self.frozen = list(set(self.frozen))
+
+        self.firstPhase = [[1 if (array[r][c]!=0 and array[r][c] != 1) else 0 for c in range(array.shape[1])] for r in range(array.shape[0])]
+
+
+    def get_phase(self):
+        return self.firstPhase
+
+    def get_boundaries(self):
+        return self.boundry
+
+    def check_boundries(self):
+        array = self.get()
+        for r in range(array.shape[0]):
+            for c in range(array.shape[1]):
+                neighbours = []
+                for item in self.KERNEL_MOORE:
+                    r_n = r + item[0]
+                    c_n = c + item[1]
+                    if (0 <= r_n <= array.shape[0] - 1) and (0 <= c_n <= array.shape[1] - 1):
+                        neighbour = array[r_n, c_n]
+                    else:
+                        neighbour = 0
+
+                    neighbours.append(neighbour)
+                if len(collections.Counter(neighbours)) == 1:
+                    self.boundry[r][c] = False
+                else:
+                    self.boundry[r][c] = True
 
 
 class FrontEnd(CellularAutomata):
@@ -640,15 +683,20 @@ class FrontEnd(CellularAutomata):
             print(f'clicked at: {event.x},{event.y}\nGrainID: {array[event.y][event.x]}')
             self.delete_grainID(array[event.y][event.x])
 
-    def map_to_image(self, array=None):
+    def map_to_image(self, array=None, change_order=True):
         if array is None:
             array = self.get()
+            img = np.array([[colors[array[r][c] % 301] if self.boundry[r][c] != True else colors[2] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
         else:
+            img = np.array([[colors[array[r][c] % 301] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
+
+        if change_order is False:
             pass
-        img = np.array([[colors[array[r][c] % 301] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
+        else:
+            b, g, r = cv2.split(img)
+            img = cv2.merge((r, g, b))
         # cv2.imshow("Callular Automata Image", self.img)
-        b, g, r = cv2.split(img)
-        img = cv2.merge((r, g, b))
+
         self.img = img
         return img
 
@@ -713,7 +761,8 @@ class Functionalities:
             self.FE.dilatate_is_procedure()
         elif self.operation == "RST":
             print("Resetting data")
-            self.FE.reset()
+            # self.FE.reset()
+            self.FE.check_boundries()
         elif self.operation == "Dual-phase":
             self.FE.dual_phase_feature()
         elif self.operation == "Substructs":
@@ -744,6 +793,9 @@ class Functionalities:
         if FIRSTPHASE_VALUE.get() == 1:
             add_name.append("firstPhase")
             data.append(self.FE.only_first_phase())
+        if BOUNDARIES_VALUE.get() == 1:
+            add_name.append("boundaries")
+            data.append(self.FE.only_boundaries())
 
         if not data:
             MERGED_VALUE.set(1)
@@ -754,7 +806,7 @@ class Functionalities:
             if window.PATH_SAVE.get() == '':
                 self.fileName = f'CA_{a}_{self.timeNow}'
             else:
-                self.fileName = f'{a}_{window.PATH_SAVE.get()}'
+                self.fileName = f'{window.PATH_SAVE.get()}_{a}'
             with open(str(self.currentPath + r'\\Data\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
                 np.savetxt(file_s, d, delimiter=',', fmt='%d')
 
@@ -763,43 +815,73 @@ class Functionalities:
         add_name = []
         data = []
         image = []
+        phase = []
+        boundary = []
+        is_merged_mode = []
         if MERGED_VALUE.get() == 1:
+            is_merged_mode.append(1)
             add_name.append("merged")
             data.append(self.FE.get())
-            image.append(self.FE.map_to_image())
+            image.append(self.FE.map_to_image(self.FE.get(), change_order=False))
+            phase.append(self.FE.get_phase())
+            boundary.append(self.FE.get_boundaries())
         if GRAINS_VALUE.get() == 1:
+            is_merged_mode.append(0)
             add_name.append("grains")
             data.append(self.FE.only_grains())
-            image.append(self.FE.map_to_image(self.FE.only_grains()))
+            image.append(self.FE.map_to_image(self.FE.only_grains(), change_order=False))
+            phase.append(self.FE.get_phase())
+            boundary.append(self.FE.get_boundaries())
         if INCLUSIONS_VALUE.get() == 1:
+            is_merged_mode.append(0)
             add_name.append("inclusions")
             data.append(self.FE.only_inclusions())
-            image.append(self.FE.map_to_image(self.FE.only_inclusions()))
+            image.append(self.FE.map_to_image(self.FE.only_inclusions(), change_order=False))
+            phase.append(self.FE.get_phase())
+            boundary.append(self.FE.get_boundaries())
         if FIRSTPHASE_VALUE.get() == 1:
+            is_merged_mode.append(0)
             add_name.append("firstPhase")
             data.append(self.FE.only_first_phase())
-            image.append(self.FE.map_to_image(self.FE.only_first_phase()))
-
+            image.append(self.FE.map_to_image(self.FE.only_first_phase(), change_order=False))
+            phase.append(self.FE.get_phase())
+            boundary.append(self.FE.get_boundaries())
+        if BOUNDARIES_VALUE.get() == 1:
+            is_merged_mode.append(0)
+            add_name.append("boundaries")
+            data.append(self.FE.only_boundaries())
+            image.append(self.FE.map_to_image(self.FE.only_boundaries(), change_order=False))
+            phase.append(self.FE.get_phase())
+            boundary.append(self.FE.get_boundaries())
         if not data:
             MERGED_VALUE.set(1)
+            is_merged_mode.append(1)
             add_name.append("merged")
-            data.append(data)
-            image.append(self.FE.map_to_image())
+            data.append(self.FE.get())
+            image.append(self.FE.map_to_image(self.FE.get(), change_order=False))
+            phase.append(self.FE.get_phase())
+            boundary.append(self.FE.get_boundaries())
 
-        for a, d, img in zip(add_name, data, image):
+
+        for a, d, img, pH, b, ism in zip(add_name, data, image, phase, boundary, is_merged_mode):
             if window.PATH_EXPORT.get() == '':
                 self.fileName = f'Export_{a}_{self.timeNow}'
             else:
-                self.fileName = f'{a}_{window.PATH_SAVE.get()}'
+                self.fileName = f'{window.PATH_EXPORT.get()}_{a}'
 
+            # array = ['Row', 'Column', 'grain_ID', 'Phase', 'is_boundary']
             array = []
-            with open(str(self.currentPath + r'\\Data\\CSVs\\' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
+            with open(str(self.currentPath + r'/Data/CSVs/' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
                 for r in range(d.shape[0]):
                     for c in range(d.shape[1]):
-                        new = [r, c, d[r][c]]
-                        array.append(new)
+                        if d[r][c] == 0 and ism == 0:
+                            pass
+                        else:
+                            new = [r, c, d[r][c], pH[r][c], b[r][c]]
+                            array.append(new)
+                print(self.currentPath)
                 np.savetxt(file_s, array, delimiter=';', fmt='%d')
-            cv2.imwrite(self.currentPath + r'\\Data\\PNGs\\' + str(self.fileName) + '.png', img)
+            cv2.imwrite(self.currentPath + r'/Data/PNGs/' + str(self.fileName) + '.png', img)
 
     def openFile(self):
         path = filedialog.askopenfilename(filetypes=(("*.csv", "*.csv"), ("All files", "*.*")))
@@ -861,6 +943,10 @@ window.INCLUSIONS.pack(side=LEFT)
 FIRSTPHASE_VALUE = IntVar()
 window.FIRSTPHASE = Checkbutton(window.f03, text="firstPhase", variable=FIRSTPHASE_VALUE)
 window.FIRSTPHASE.pack(side=LEFT)
+
+BOUNDARIES_VALUE = IntVar()
+window.BOUNDARIES = Checkbutton(window.f03, text="firstPhase", variable=BOUNDARIES_VALUE)
+window.BOUNDARIES.pack(side=LEFT)
 
 MERGED_VALUE = IntVar()
 window.MERGED = Checkbutton(window.f03, text="Merged", variable=MERGED_VALUE)
@@ -1053,10 +1139,44 @@ merged_old = 0
 MERGED_VALUE.set(1)
 
 window.canvas.bind("<Button-1>", f.FE.callback)
+if sys.version_info >= (3, 0):
+    _thread_target_key = '_target'
+    _thread_args_key = '_args'
+    _thread_kwargs_key = '_kwargs'
+else:
+    _thread_target_key = '_Thread__target'
+    _thread_args_key = '_Thread__args'
+    _thread_kwargs_key = '_Thread__kwargs'
+class ThreadWithReturn(Thread):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._return = None
+
+    def run(self):
+        target = getattr(self, _thread_target_key)
+        if not target is None:
+            self._return = target(
+                *getattr(self, _thread_args_key),
+                **getattr(self, _thread_kwargs_key)
+            )
+
+    def ret(self, *args, **kwargs):
+        return self._return
+
+th1 = ThreadWithReturn(target=f.FE.refresh)
+th1.start()
+img = f.FE.map_to_image()
 
 while 1:
-    i = ImageTk.PhotoImage(Image.fromarray(f.FE.refresh()), master=window)
-    window.canvas.create_image(0, 0, anchor=NW, image=i)
+    if th1.is_alive():
+        pass
+    else:
+        img = img if th1.ret() is None else th1.ret()
+        th1 = ThreadWithReturn(target=f.FE.refresh)
+        th1.start()
+
+        i = ImageTk.PhotoImage(Image.fromarray(img), master=window)
+        window.canvas.create_image(0, 0, anchor=NW, image=i)
 
     try:
         KERNEL_CURR_VALUE.set(KERNELS[window.LIST.curselection()[0]])
@@ -1087,14 +1207,16 @@ while 1:
         GRAINS_VALUE.set(0)
         INCLUSIONS_VALUE.set(0)
         FIRSTPHASE_VALUE.set(0)
+        BOUNDARIES_VALUE.set(0)
         merged_old = 0
     elif MERGED_VALUE.get() == 1 and merged_old == 0:
         GRAINS_VALUE.set(1)
         INCLUSIONS_VALUE.set(1)
         FIRSTPHASE_VALUE.set(1)
+        BOUNDARIES_VALUE.set(1)
         merged_old = 1
     else:
-        if GRAINS_VALUE.get() == 1 and INCLUSIONS_VALUE.get() == 1 and FIRSTPHASE_VALUE.get() == 1:
+        if GRAINS_VALUE.get() == 1 and INCLUSIONS_VALUE.get() == 1 and FIRSTPHASE_VALUE.get() == 1 and BOUNDARIES_VALUE.get():
             MERGED_VALUE.set(1)
             merged_old = 1
         else:
@@ -1150,3 +1272,4 @@ while 1:
 # canvas.draw()
 # canvas.get_tk_widget().grid(row=5, column=0)
 '''
+
