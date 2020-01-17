@@ -895,13 +895,12 @@ class Functionalities:
             # array = ['Row', 'Column', 'grain_ID', 'Phase', 'is_boundary']
             array = []
             with open(str(self.currentPath + r'/Data/CSVs/' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
-                try:
-                    array.append(f"Boarders' lengths: ")
-                    for k, v in f.FE.border_length.items():
-                        array.append(f'{k} -> {v}')
-                except:
-                    pass
+
+                array.append(f"Boarders' lengths: ")
+                for k, v in f.FE.border_length.items():
+                    array.append(f'{k} -> {v}')
                 array.append(f'Average grain size: {f.FE.avg_grain_size}')
+
 
                 for r in range(d.shape[0]):
                     for c in range(d.shape[1]):
