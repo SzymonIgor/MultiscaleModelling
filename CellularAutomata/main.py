@@ -10,6 +10,7 @@ from scipy import ndimage
 from PIL import Image, ImageTk
 import collections
 from threading import Thread
+from collections import defaultdict
 import time
 
 window = Tk()
@@ -332,6 +333,10 @@ KERNELS = {0: "MOORE",
 class CellularAutomata:
     ROWS_NO = 500
     COLUMNS_NO = 500
+
+    KERNEL_FULL = [(-1, -1), (-1, 0), (-1, 1),
+                    (0, -1), (0, 0), (0, 1),
+                    (1, -1), (1, 0), (1, 1)]
     KERNEL_MOORE = [(-1, -1), (-1, 0), (-1, 1),
                     (0, -1), (0, 1),
                     (1, -1), (1, 0), (1, 1)]
@@ -374,6 +379,8 @@ class CellularAutomata:
         self.frozen = []
         self.firstPhase = np.zeros([self.rows, self.columns], dtype=np.uint8)
         self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
+        self.avg_grain_size = None
+        self.border_length = {}
 
 
     def set(self, newData):
@@ -394,6 +401,7 @@ class CellularAutomata:
         self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
         self.is_procedure = False
         self.firstPhase = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        self.frozen = []
         self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
 
     def update_kernel(self):
@@ -647,25 +655,40 @@ class CellularAutomata:
     def get_boundaries(self):
         return self.boundry
 
-    def check_boundries(self):
+    def check_boundaries(self):
         array = self.get()
+        temp_avg = defaultdict(lambda: 0)
+        temp_bl = defaultdict(lambda: 0)
         for r in range(array.shape[0]):
             for c in range(array.shape[1]):
-                neighbours = []
-                for item in self.KERNEL_MOORE:
-                    r_n = r + item[0]
-                    c_n = c + item[1]
-                    if (0 <= r_n <= array.shape[0] - 1) and (0 <= c_n <= array.shape[1] - 1):
-                        neighbour = array[r_n, c_n]
-                    else:
-                        neighbour = 0
-
-                    neighbours.append(neighbour)
-                if len(collections.Counter(neighbours)) == 1:
-                    self.boundry[r][c] = False
+                if array[r][c] == 0 or array[r][c] == 1 or array[r][c] == 2:
+                    pass
                 else:
-                    self.boundry[r][c] = True
+                    neighbours = []
+                    for item in self.KERNEL_FULL:
+                        r_n = r + item[0]
+                        c_n = c + item[1]
+                        if (0 <= r_n <= array.shape[0] - 1) and (0 <= c_n <= array.shape[1] - 1):
+                            neighbour = array[r_n, c_n]
+                        else:
+                            neighbour = 0
 
+                        neighbours.append(neighbour)
+                    if len(collections.Counter(neighbours)) == 1:
+                        self.boundry[r][c] = False
+                    else:
+                        self.boundry[r][c] = True
+
+                    if self.boundry[r][c]:
+                        temp_bl[array[r][c]] += 1
+
+                    temp_avg[array[r][c]] += 1
+        try:
+            self.avg_grain_size = sum(temp_avg.values()) / len(temp_avg)
+        except:
+            pass
+
+        self.border_length = dict(temp_bl)
 
 class FrontEnd(CellularAutomata):
     def __init__(self):
@@ -759,10 +782,10 @@ class Functionalities:
             print("Starting/Pausing the Procedure")
             self.update_vars()
             self.FE.dilatate_is_procedure()
-        elif self.operation == "RST":
-            print("Resetting data")
+        elif self.operation == "Boundaries":
+            print("Boundaries creation")
             # self.FE.reset()
-            self.FE.check_boundries()
+            self.FE.check_boundaries()
         elif self.operation == "Dual-phase":
             self.FE.dual_phase_feature()
         elif self.operation == "Substructs":
@@ -872,6 +895,14 @@ class Functionalities:
             # array = ['Row', 'Column', 'grain_ID', 'Phase', 'is_boundary']
             array = []
             with open(str(self.currentPath + r'/Data/CSVs/' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
+                try:
+                    array.append(f"Boarders' lengths: ")
+                    for k, v in f.FE.border_length.items():
+                        array.append(f'{k} -> {v}')
+                except:
+                    pass
+                array.append(f'Average grain size: {f.FE.avg_grain_size}')
+
                 for r in range(d.shape[0]):
                     for c in range(d.shape[1]):
                         if d[r][c] == 0 and ism == 0:
@@ -879,8 +910,10 @@ class Functionalities:
                         else:
                             new = [r, c, d[r][c], pH[r][c], b[r][c]]
                             array.append(new)
+
+
                 print(self.currentPath)
-                np.savetxt(file_s, array, delimiter=';', fmt='%d')
+                np.savetxt(file_s, array, delimiter=';', fmt='%s')
             cv2.imwrite(self.currentPath + r'/Data/PNGs/' + str(self.fileName) + '.png', img)
 
     def openFile(self):
@@ -945,7 +978,7 @@ window.FIRSTPHASE = Checkbutton(window.f03, text="firstPhase", variable=FIRSTPHA
 window.FIRSTPHASE.pack(side=LEFT)
 
 BOUNDARIES_VALUE = IntVar()
-window.BOUNDARIES = Checkbutton(window.f03, text="firstPhase", variable=BOUNDARIES_VALUE)
+window.BOUNDARIES = Checkbutton(window.f03, text="Boundaries", variable=BOUNDARIES_VALUE)
 window.BOUNDARIES.pack(side=LEFT)
 
 MERGED_VALUE = IntVar()
@@ -1000,7 +1033,7 @@ ButtonCreator(window.f22, "Initialize")
 
 window.f23 = Frame(window.lf2)
 window.f23.pack(pady=8, fill=X)
-ButtonCreator(window.f23, "RST")
+ButtonCreator(window.f23, "Boundaries")
 # -----------END---Start-up---END-----------
 
 
