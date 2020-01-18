@@ -378,7 +378,7 @@ class CellularAutomata:
         self.inclusions_r_max = 10
         self.frozen = []
         self.firstPhase = np.zeros([self.rows, self.columns], dtype=np.uint8)
-        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
+        self.boundary = np.zeros([self.rows, self.columns], dtype=np.bool)
         self.avg_grain_size = None
         self.border_length = {}
 
@@ -398,11 +398,11 @@ class CellularAutomata:
         self.is_procedure = False
 
     def init(self):
-        self.data = np.zeros([self.rows, self.columns], dtype=np.uint8)
+        self.set(np.zeros([self.rows, self.columns], dtype=np.uint8))
         self.is_procedure = False
         self.firstPhase = np.zeros([self.rows, self.columns], dtype=np.uint8)
         self.frozen = []
-        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
+        self.boundary = np.zeros([self.rows, self.columns], dtype=np.bool)
 
     def update_kernel(self):
         if self.is_random == 1:
@@ -437,12 +437,12 @@ class CellularAutomata:
 
     def only_first_phase(self):
         a = self.data
-        a = np.array([[a[r][c] if self.firstPhase[r][c] != 0 else 0 for c in range(self.columns)] for r in range(self.rows)])
+        a = np.array([[a[r][c] if self.firstPhase[r][c] == 1 else 0 for c in range(self.columns)] for r in range(self.rows)])
         return a
 
     def only_boundaries(self):
         a = self.data
-        a = np.array([[a[r][c] if self.boundry[r][c] else 0 for c in range(self.columns)] for r in range(self.rows)])
+        a = np.array([[a[r][c] if self.boundary[r][c] else 0 for c in range(self.columns)] for r in range(self.rows)])
         return a
 
     def create_circular_mask(self, h, w, center=None, radius=None):
@@ -490,7 +490,7 @@ class CellularAutomata:
                     pass
 
     def generate_seed(self, grains):
-        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
+        self.boundary = np.zeros([self.rows, self.columns], dtype=np.bool)
 
         self.grain_quantity = int(grains)
         array = self.get()
@@ -519,7 +519,7 @@ class CellularAutomata:
 
     def dilatate_base_type(self, r, c):
         array = self.get()
-        self.boundry = np.zeros([self.rows, self.columns], dtype=np.bool)
+        self.boundary = np.zeros([self.rows, self.columns], dtype=np.bool)
         if array[r][c] != 0 or array[r][c] == 1:
             new_value = [(array[r][c], 0)]
             quantity = 0
@@ -646,17 +646,18 @@ class CellularAutomata:
         [[self.frozen.append(array[r][c]) if (array[r][c] != 0 and array[r][c] != 1) else None for c in range(array.shape[1])] for r in range(array.shape[0])]
         self.frozen = list(set(self.frozen))
 
-        self.firstPhase = [[1 if (array[r][c]!=0 and array[r][c] != 1) else 0 for c in range(array.shape[1])] for r in range(array.shape[0])]
+        self.firstPhase = [[1 if (array[r][c] != 0 and array[r][c] != 1) else 2 for c in range(array.shape[1])] for r in range(array.shape[0])]
 
 
     def get_phase(self):
         return self.firstPhase
 
     def get_boundaries(self):
-        return self.boundry
+        return self.boundary
 
     def check_boundaries(self):
         array = self.get()
+        self.boundary = np.zeros([self.rows, self.columns], dtype=np.bool)
         temp_avg = defaultdict(lambda: 0)
         temp_bl = defaultdict(lambda: 0)
         for r in range(array.shape[0]):
@@ -675,11 +676,11 @@ class CellularAutomata:
 
                         neighbours.append(neighbour)
                     if len(collections.Counter(neighbours)) == 1:
-                        self.boundry[r][c] = False
+                        self.boundary[r][c] = False
                     else:
-                        self.boundry[r][c] = True
+                        self.boundary[r][c] = True
 
-                    if self.boundry[r][c]:
+                    if self.boundary[r][c]:
                         temp_bl[array[r][c]] += 1
 
                     temp_avg[array[r][c]] += 1
@@ -707,11 +708,14 @@ class FrontEnd(CellularAutomata):
             self.delete_grainID(array[event.y][event.x])
 
     def map_to_image(self, array=None, change_order=True):
-        if array is None:
-            array = self.get()
-            img = np.array([[colors[array[r][c] % 301] if self.boundry[r][c] != True else colors[2] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
-        else:
-            img = np.array([[colors[array[r][c] % 301] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
+        try:
+            if array is None:
+                array = self.get()
+                img = np.array([[colors[array[r][c] % 301] if self.boundary[r][c] != True else colors[2] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
+            else:
+                img = np.array([[colors[array[r][c] % 301] for c in range(self.columns)] for r in range(self.rows)], dtype=np.uint8)
+        except:
+            img = self.img
 
         if change_order is False:
             pass
@@ -721,7 +725,7 @@ class FrontEnd(CellularAutomata):
         # cv2.imshow("Callular Automata Image", self.img)
 
         self.img = img
-        return img
+        return self.img
 
     def refresh(self):
         # print(f'0 {datetime.now()}')
@@ -834,6 +838,7 @@ class Functionalities:
                 np.savetxt(file_s, d, delimiter=',', fmt='%d')
 
     def exportFile(self):
+        f.FE.check_boundaries()
         self.timeNow = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         add_name = []
         data = []
@@ -895,8 +900,8 @@ class Functionalities:
             # array = ['Row', 'Column', 'grain_ID', 'Phase', 'is_boundary']
             array = []
             with open(str(self.currentPath + r'/Data/CSVs/' + str(self.fileName) + '.csv'), 'w', newline='') as file_s:
-
-                array.append(f"Boarders' lengths: ")
+                array.append(f'Size [columns x rows]: [{f.FE.columns} x {f.FE.rows}]')
+                array.append(f"Boarders' lengths [grainID -> length]: ")
                 for k, v in f.FE.border_length.items():
                     array.append(f'{k} -> {v}')
                 array.append(f'Average grain size: {f.FE.avg_grain_size}')
@@ -904,7 +909,7 @@ class Functionalities:
 
                 for r in range(d.shape[0]):
                     for c in range(d.shape[1]):
-                        if d[r][c] == 0 and ism == 0:
+                        if d[r][c] == 0 or d[r][c] == 2 and ism == 0:
                             pass
                         else:
                             new = [r, c, d[r][c], pH[r][c], b[r][c]]
@@ -1200,63 +1205,71 @@ th1.start()
 img = f.FE.map_to_image()
 
 while 1:
-    if th1.is_alive():
-        pass
-    else:
-        img = img if th1.ret() is None else th1.ret()
-        th1 = ThreadWithReturn(target=f.FE.refresh)
-        th1.start()
-
-        i = ImageTk.PhotoImage(Image.fromarray(img), master=window)
-        window.canvas.create_image(0, 0, anchor=NW, image=i)
-
     try:
-        KERNEL_CURR_VALUE.set(KERNELS[window.LIST.curselection()[0]])
-    except:
-        pass
+        if th1.is_alive():
+            pass
+        else:
+            img = img if th1.ret() is None else th1.ret()
+            th1 = ThreadWithReturn(target=f.FE.refresh)
+            th1.start()
 
-    if f.FE.is_procedure == 1:
-        window.GBC.config(state='disabled')
-        window.RANDOM_BOX.config(state='disabled')
-        window.WRAP.config(state='disabled')
-        window.LIST.config(state='disabled')
-    else:
-        window.GBC.config(state='normal')
-        if GBC_VALUE.get() == 1:
-            window.LIST.select_clear(first=0, last=6)
-            KERNEL_CURR_VALUE.set(KERNELS[0])
-            window.GBC_THRESHOLD.config(state='normal')
+            i = ImageTk.PhotoImage(Image.fromarray(img), master=window)
+            window.canvas.create_image(0, 0, anchor=NW, image=i)
+
+        try:
+            KERNEL_CURR_VALUE.set(KERNELS[window.LIST.curselection()[0]])
+        except:
+            pass
+
+        if f.FE.is_procedure == 1:
+            window.GBC.config(state='disabled')
             window.RANDOM_BOX.config(state='disabled')
             window.WRAP.config(state='disabled')
             window.LIST.config(state='disabled')
         else:
-            window.GBC_THRESHOLD.config(state='disabled')
-            window.RANDOM_BOX.config(state='normal')
-            window.WRAP.config(state='normal')
-            window.LIST.config(state='normal')
+            window.GBC.config(state='normal')
+            if GBC_VALUE.get() == 1:
+                window.LIST.select_clear(first=0, last=6)
+                KERNEL_CURR_VALUE.set(KERNELS[0])
+                window.GBC_THRESHOLD.config(state='normal')
+                window.RANDOM_BOX.config(state='disabled')
+                window.WRAP.config(state='disabled')
+                window.LIST.config(state='disabled')
+            else:
+                window.GBC_THRESHOLD.config(state='disabled')
+                window.RANDOM_BOX.config(state='normal')
+                window.WRAP.config(state='normal')
+                window.LIST.config(state='normal')
 
-    if MERGED_VALUE.get() == 0 and merged_old == 1:
-        GRAINS_VALUE.set(0)
-        INCLUSIONS_VALUE.set(0)
-        FIRSTPHASE_VALUE.set(0)
-        BOUNDARIES_VALUE.set(0)
-        merged_old = 0
-    elif MERGED_VALUE.get() == 1 and merged_old == 0:
-        GRAINS_VALUE.set(1)
-        INCLUSIONS_VALUE.set(1)
-        FIRSTPHASE_VALUE.set(1)
-        BOUNDARIES_VALUE.set(1)
-        merged_old = 1
-    else:
-        if GRAINS_VALUE.get() == 1 and INCLUSIONS_VALUE.get() == 1 and FIRSTPHASE_VALUE.get() == 1 and BOUNDARIES_VALUE.get():
-            MERGED_VALUE.set(1)
+        if MERGED_VALUE.get() == 0 and merged_old == 1:
+            GRAINS_VALUE.set(0)
+            INCLUSIONS_VALUE.set(0)
+            FIRSTPHASE_VALUE.set(0)
+            BOUNDARIES_VALUE.set(0)
+            merged_old = 0
+        elif MERGED_VALUE.get() == 1 and merged_old == 0:
+            GRAINS_VALUE.set(1)
+            INCLUSIONS_VALUE.set(1)
+            FIRSTPHASE_VALUE.set(1)
+            BOUNDARIES_VALUE.set(1)
             merged_old = 1
         else:
-            MERGED_VALUE.set(0)
-            merged_old = 0
-    # print(list(KERNELS.values()).index(KERNEL_CURR_VALUE.get()))
-    window.update_idletasks()
-    window.update()
+            if GRAINS_VALUE.get() == 1 and INCLUSIONS_VALUE.get() == 1 and FIRSTPHASE_VALUE.get() == 1 and BOUNDARIES_VALUE.get():
+                MERGED_VALUE.set(1)
+                merged_old = 1
+            else:
+                MERGED_VALUE.set(0)
+                merged_old = 0
+        # print(list(KERNELS.values()).index(KERNEL_CURR_VALUE.get()))
+
+    except:
+        pass
+
+    try:
+        window.update_idletasks()
+        window.update()
+    except:
+        break
 
 
 
